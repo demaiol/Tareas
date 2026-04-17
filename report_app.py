@@ -86,6 +86,17 @@ def render_kpis(metrics: dict[str, int]) -> None:
         )
 
 
+def format_dt(value: str | datetime | None) -> str:
+    if not value:
+        return "-"
+    if isinstance(value, datetime):
+        return value.astimezone(TZ).strftime("%d-%m-%Y %H:%M")
+    try:
+        return datetime.fromisoformat(value).astimezone(TZ).strftime("%d-%m-%Y %H:%M")
+    except (TypeError, ValueError):
+        return str(value)
+
+
 def build_status_df(metrics: dict[str, int]) -> pd.DataFrame:
     pending = metrics["Total"] - metrics["Resuelto"]
     return pd.DataFrame(
@@ -242,9 +253,9 @@ def render_read_only_table(rows: list) -> None:
                 "Correo": r["requester_email"],
                 "Tema": r["title"],
                 "Asignado": r["assignee"],
-                "Fecha alta": r["created_at"],
-                "Fecha vencimiento": r["due_at"],
-                "Actualizado": r["updated_at"],
+                "Fecha alta": format_dt(r["created_at"]),
+                "Fecha vencimiento": format_dt(r["due_at"]),
+                "Actualizado": format_dt(r["updated_at"]),
             }
             for r in rows
         ]

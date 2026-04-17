@@ -74,9 +74,11 @@ h1, h2, h3 {
 def format_dt(value: str | None) -> str:
     if not value:
         return "-"
+    if isinstance(value, datetime):
+        return value.astimezone(TZ).strftime("%d-%m-%Y %H:%M")
     try:
         return datetime.fromisoformat(value).astimezone(TZ).strftime("%d-%m-%Y %H:%M")
-    except ValueError:
+    except (TypeError, ValueError):
         return value
 
 

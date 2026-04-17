@@ -251,12 +251,11 @@ def main() -> None:
     if not require_admin_login():
         return
 
-    sync_emails_ui()
-
     st.title("Gestor de Requerimientos")
     st.caption(
         f"Control de solicitudes por correo | Fecha actual: {datetime.now(TZ).strftime('%d-%m-%Y %H:%M')}"
     )
+    sync_emails_ui()
 
     render_metrics()
 

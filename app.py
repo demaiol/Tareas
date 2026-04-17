@@ -16,7 +16,11 @@ from req_manager.db import (
     list_requirements,
     update_requirement,
 )
-from req_manager.email_ack import EmailAckConfigError, send_acknowledgement
+from req_manager.email_ack import (
+    EmailAckConfigError,
+    send_acknowledgement,
+    send_resolution_notification,
+)
 from req_manager.email_ingest import EmailConfigError, sync_unseen_emails
 
 TZ = ZoneInfo("America/Santiago")
@@ -148,6 +152,9 @@ def sync_emails_ui() -> None:
         st.caption(
             "Acuse automático: usa Gmail SMTP con `GMAIL_*` o SMTP genérico con `SMTP_*`."
         )
+        st.caption(
+            "Al pasar un REQ a `Resuelto`, se envía correo de cierre al solicitante."
+        )
 
 
 def build_table(rows: list) -> pd.DataFrame:
@@ -209,8 +216,22 @@ def requirement_editor(req_code: str) -> None:
 
         submitted = st.form_submit_button("Guardar actualización", use_container_width=True)
         if submitted:
+            closing_now = status == "Resuelto" and req["status"] != "Resuelto"
             update_requirement(req_code, status, response, resolved_by)
             st.success("Requerimiento actualizado correctamente.")
+            if closing_now:
+                updated_req = get_requirement(req_code) or req
+                try:
+                    send_resolution_notification(updated_req)
+                    st.info("Se envió correo de cierre al solicitante.")
+                except EmailAckConfigError:
+                    st.warning(
+                        "REQ cerrado, pero no se pudo enviar correo de cierre por falta de configuración SMTP."
+                    )
+                except Exception:  # noqa: BLE001
+                    st.warning(
+                        "REQ cerrado, pero ocurrió un error al enviar el correo de cierre."
+                    )
             st.rerun()
 
     if req["resolved_at"]:

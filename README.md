@@ -20,6 +20,7 @@ Aplicación productiva para registrar y gestionar requerimientos recibidos por c
   - Actualizar estado (`Nuevo`, `En progreso`, `Resuelto`)
   - Registrar quién resolvió
 - Envía acuse automático al remitente con agradecimiento y número de REQ.
+- Envía correo automático de cierre al solicitante al pasar un REQ a `Resuelto`.
 
 ## Requisitos
 
@@ -148,8 +149,9 @@ python3 scripts/migrate-to-postgres.py
 1. En la barra lateral, presiona **Sincronizar correos no leídos**.
 2. La app creará automáticamente los `REQ` nuevos (evita duplicados por `Message-ID`).
 3. Por cada REQ nuevo, la app enviará un correo de acuse al remitente con su número de requerimiento.
-4. Revisa el reporte, filtra por estado y selecciona el `REQ`.
-5. Carga respuesta y actualiza estado.
+4. Al cambiar un REQ a `Resuelto`, la app envía correo de cierre al solicitante.
+5. Revisa el reporte, filtra por estado y selecciona el `REQ`.
+6. Carga respuesta y actualiza estado.
 
 ## Base de datos
 

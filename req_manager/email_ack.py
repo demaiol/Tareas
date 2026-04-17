@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import os
 import smtplib
+from datetime import datetime
 from email.message import EmailMessage
+from typing import Any
 
 from req_manager.db import EmailRequest
 
@@ -75,17 +77,8 @@ def _build_ack_message(to_name: str, to_email: str, req_code: str, title: str) -
     return message
 
 
-def send_acknowledgement(request: EmailRequest, req_code: str) -> None:
-    if not request.requester_email or "@" not in request.requester_email:
-        return
-
+def _send_email_message(msg: EmailMessage) -> None:
     host, port, smtp_user, smtp_password, use_ssl = _resolve_smtp_config()
-    msg = _build_ack_message(
-        to_name=request.requester_name,
-        to_email=request.requester_email,
-        req_code=req_code,
-        title=request.title,
-    )
     msg["From"] = smtp_user
 
     if use_ssl:
@@ -97,3 +90,72 @@ def send_acknowledgement(request: EmailRequest, req_code: str) -> None:
             smtp.starttls()
             smtp.login(smtp_user, smtp_password)
             smtp.send_message(msg)
+
+
+def send_acknowledgement(request: EmailRequest, req_code: str) -> None:
+    if not request.requester_email or "@" not in request.requester_email:
+        return
+
+    msg = _build_ack_message(
+        to_name=request.requester_name,
+        to_email=request.requester_email,
+        req_code=req_code,
+        title=request.title,
+    )
+    _send_email_message(msg)
+
+
+def _fmt_dt(value: Any) -> str:
+    if not value:
+        return "-"
+    if isinstance(value, datetime):
+        return value.strftime("%d-%m-%Y %H:%M")
+    return str(value)
+
+
+def send_resolution_notification(requirement: dict[str, Any]) -> None:
+    to_email = str(requirement.get("requester_email", "")).strip()
+    if not to_email or "@" not in to_email:
+        return
+
+    to_name = str(requirement.get("requester_name", "")).strip() or "solicitante"
+    req_code = str(requirement.get("req_code", "")).strip() or "(sin código)"
+    title = str(requirement.get("title", "")).strip() or "(sin título)"
+    response = str(requirement.get("response", "")).strip() or "Sin detalle de resolución."
+    resolved_by = str(requirement.get("resolved_by", "")).strip() or "Administrador"
+    resolved_at = _fmt_dt(requirement.get("resolved_at"))
+
+    message = EmailMessage()
+    message["To"] = to_email
+    message["Subject"] = f"Cierre de requerimiento {req_code}"
+    message.set_content(
+        (
+            f"Estimado/a {to_name},\n\n"
+            f"Tu requerimiento {req_code} ha sido resuelto.\n\n"
+            "Detalle de cierre:\n"
+            f"- Título: {title}\n"
+            f"- Respuesta: {response}\n"
+            f"- Resuelto por: {resolved_by}\n"
+            f"- Fecha de cierre: {resolved_at}\n\n"
+            "Gracias por comunicarte con nosotros.\n\n"
+            "Saludos,\n"
+            "Administracion Comunidad Vistamar"
+        )
+    )
+    message.add_alternative(
+        (
+            f"<p>Estimado/a <strong>{to_name}</strong>,</p>"
+            f"<p>Tu requerimiento <strong>{req_code}</strong> ha sido resuelto.</p>"
+            "<p><strong>Detalle de cierre:</strong></p>"
+            "<ul>"
+            f"<li><strong>Título:</strong> {title}</li>"
+            f"<li><strong>Respuesta:</strong> {response}</li>"
+            f"<li><strong>Resuelto por:</strong> {resolved_by}</li>"
+            f"<li><strong>Fecha de cierre:</strong> {resolved_at}</li>"
+            "</ul>"
+            "<p>Gracias por comunicarte con nosotros.</p>"
+            "<p>Saludos,<br/>Administracion Comunidad Vistamar</p>"
+        ),
+        subtype="html",
+    )
+    _send_email_message(message)

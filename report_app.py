@@ -10,6 +10,8 @@ from zoneinfo import ZoneInfo
 from req_manager.db import ensure_schema, get_metrics, list_requirements
 
 TZ = ZoneInfo("America/Santiago")
+REPORT_USER = "gestion"
+REPORT_PASSWORD = "gestion123$"
 
 st.set_page_config(
     page_title="Reporte Ejecutivo de Requerimientos",
@@ -58,6 +60,29 @@ h1, h2, h3 {
 """,
     unsafe_allow_html=True,
 )
+
+
+def require_report_login() -> bool:
+    if st.session_state.get("report_authenticated", False):
+        return True
+
+    st.title("Acceso Reportes")
+    st.caption("Ingresa tus credenciales para ver el módulo de reportes.")
+
+    with st.form("report_login_form", clear_on_submit=False):
+        username = st.text_input("Usuario")
+        password = st.text_input("Contraseña", type="password")
+        submitted = st.form_submit_button("Ingresar", use_container_width=True)
+
+    if submitted:
+        if username == REPORT_USER and password == REPORT_PASSWORD:
+            st.session_state["report_authenticated"] = True
+            st.success("Autenticación correcta.")
+            st.rerun()
+        else:
+            st.error("Usuario o contraseña inválidos.")
+
+    return False
 
 
 def render_kpis(metrics: dict[str, int]) -> None:
@@ -264,6 +289,9 @@ def render_read_only_table(rows: list) -> None:
 
 
 def main() -> None:
+    if not require_report_login():
+        return
+
     ensure_schema()
     rows = list_requirements("Todos")
     metrics = get_metrics()

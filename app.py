@@ -16,13 +16,14 @@ from req_manager.db import (
     list_requirements,
     update_requirement,
 )
+from req_manager.email_ack import EmailAckConfigError, send_acknowledgement
 from req_manager.email_ingest import EmailConfigError, sync_unseen_emails
 
 TZ = ZoneInfo("America/Santiago")
 load_dotenv()
 
 st.set_page_config(
-    page_title="Gestor Ejecutivo de Requerimientos",
+    page_title="Gestor de Requerimientos",
     page_icon="📨",
     layout="wide",
 )
@@ -81,7 +82,7 @@ def format_dt(value: str | None) -> str:
 
 def render_metrics() -> None:
     metrics = get_metrics()
-    cols = st.columns(5)
+    cols = st.columns(len(metrics))
     for col, (label, value) in zip(cols, metrics.items()):
         col.markdown(
             f"""
@@ -104,16 +105,30 @@ def sync_emails_ui() -> None:
                 parsed = sync_unseen_emails()
                 created = 0
                 duplicated = 0
+                ack_sent = 0
+                ack_failed = 0
                 for item in parsed:
                     req_code = create_requirement(item)
                     if req_code:
                         created += 1
+                        try:
+                            send_acknowledgement(item, req_code)
+                            ack_sent += 1
+                        except EmailAckConfigError:
+                            # Sin SMTP configurado, no bloqueamos el alta del REQ.
+                            ack_failed += 1
+                        except Exception:  # noqa: BLE001
+                            ack_failed += 1
                     else:
                         duplicated += 1
 
                 st.success(
                     f"Sincronización finalizada. Nuevos: {created} | Duplicados ignorados: {duplicated}"
                 )
+                if created > 0:
+                    st.info(
+                        f"Acuses enviados: {ack_sent} | Acuses con error: {ack_failed}"
+                    )
             except EmailConfigError as e:
                 st.error(str(e))
             except Exception as e:  # noqa: BLE001
@@ -124,6 +139,9 @@ def sync_emails_ui() -> None:
         )
         st.caption(
             "Modo IMAP: `IMAP_HOST`, `IMAP_USER`, `IMAP_PASSWORD` (opcional `IMAP_FOLDER`)."
+        )
+        st.caption(
+            "Acuse automático: usa Gmail SMTP con `GMAIL_*` o SMTP genérico con `SMTP_*`."
         )
 
 
@@ -170,8 +188,8 @@ def requirement_editor(req_code: str) -> None:
     with st.form(f"update_form_{req_code}"):
         status = st.selectbox(
             "Nuevo estado",
-            ["Nuevo", "En progreso", "Resuelto", "Vencido"],
-            index=["Nuevo", "En progreso", "Resuelto", "Vencido"].index(req["status"]),
+            ["Nuevo", "En progreso", "Resuelto"],
+            index=["Nuevo", "En progreso", "Resuelto"].index(req["status"]),
         )
         response = st.text_area(
             "Respuesta / resolución",
@@ -200,7 +218,7 @@ def main() -> None:
     ensure_schema()
     sync_emails_ui()
 
-    st.title("Gestor Ejecutivo de Requerimientos")
+    st.title("Gestor de Requerimientos")
     st.caption(
         f"Control de solicitudes por correo | Fecha actual: {datetime.now(TZ).strftime('%d-%m-%Y %H:%M')}"
     )
@@ -213,7 +231,7 @@ def main() -> None:
     with filter_col:
         status_filter = st.selectbox(
             "Filtrar por estado",
-            ["Todos", "Nuevo", "En progreso", "Resuelto", "Vencido"],
+            ["Todos", "Nuevo", "En progreso", "Resuelto"],
         )
 
     with refresh_col:
@@ -227,10 +245,27 @@ def main() -> None:
         return
 
     df = build_table(rows)
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    table_event = st.dataframe(
+        df,
+        use_container_width=True,
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row",
+        key="req_table",
+    )
 
-    req_options = df["REQ"].tolist()
-    selected_req = st.selectbox("Seleccionar REQ para gestión", req_options)
+    selected_req = None
+    selected_rows = getattr(getattr(table_event, "selection", None), "rows", [])
+    if selected_rows:
+        selected_req = str(df.iloc[selected_rows[0]]["REQ"])
+        st.session_state["selected_req"] = selected_req
+
+    if not selected_req:
+        st.caption(
+            "Haz click en una fila del reporte para abrir su detalle y poder actualizarlo."
+        )
+        return
+
     requirement_editor(selected_req)
 
 

@@ -5,3 +5,4 @@ __pycache__/
 .env
 req_manager.db
 streamlit.log
+.local/

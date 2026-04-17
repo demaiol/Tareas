@@ -58,6 +58,10 @@ def ensure_schema() -> None:
             )
             """
         )
+        # Migracion: eliminamos estado legacy 'Vencido'.
+        conn.execute(
+            "UPDATE requirements SET status = 'En progreso' WHERE status = 'Vencido'"
+        )
         conn.commit()
 
 
@@ -112,7 +116,6 @@ def create_requirement(item: EmailRequest) -> str | None:
 
 
 def list_requirements(status: str | None = None) -> list[sqlite3.Row]:
-    refresh_overdue_statuses()
     with get_conn() as conn:
         if status and status != "Todos":
             rows = conn.execute(
@@ -121,7 +124,12 @@ def list_requirements(status: str | None = None) -> list[sqlite3.Row]:
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT * FROM requirements ORDER BY created_at DESC"
+                """
+                SELECT * FROM requirements
+                ORDER BY
+                    CASE WHEN status = 'Resuelto' THEN 1 ELSE 0 END ASC,
+                    datetime(created_at) DESC
+                """
             ).fetchall()
     return rows
 
@@ -150,22 +158,11 @@ def update_requirement(req_code: str, status: str, response: str, resolved_by: s
 
 
 def refresh_overdue_statuses() -> None:
-    ts = now_iso()
-    with get_conn() as conn:
-        conn.execute(
-            """
-            UPDATE requirements
-            SET status = 'Vencido', updated_at = ?
-            WHERE status IN ('Nuevo', 'En progreso')
-              AND due_at < ?
-            """,
-            (ts, ts),
-        )
-        conn.commit()
+    # Estado 'Vencido' eliminado por requerimiento funcional.
+    return None
 
 
 def get_metrics() -> dict[str, int]:
-    refresh_overdue_statuses()
     with get_conn() as conn:
         total = conn.execute("SELECT COUNT(*) as c FROM requirements").fetchone()["c"]
         nuevo = conn.execute(
@@ -177,14 +174,9 @@ def get_metrics() -> dict[str, int]:
         resuelto = conn.execute(
             "SELECT COUNT(*) as c FROM requirements WHERE status = 'Resuelto'"
         ).fetchone()["c"]
-        vencido = conn.execute(
-            "SELECT COUNT(*) as c FROM requirements WHERE status = 'Vencido'"
-        ).fetchone()["c"]
-
     return {
         "Total": total,
         "Nuevo": nuevo,
         "En progreso": progreso,
         "Resuelto": resuelto,
-        "Vencido": vencido,
     }

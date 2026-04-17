@@ -17,8 +17,9 @@ Aplicación productiva para registrar y gestionar requerimientos recibidos por c
 - Presenta un **reporte ejecutivo** con métricas y estado.
 - Permite al resolutor:
   - Cargar respuesta
-  - Actualizar estado (`Nuevo`, `En progreso`, `Resuelto`, `Vencido`)
+  - Actualizar estado (`Nuevo`, `En progreso`, `Resuelto`)
   - Registrar quién resolvió
+- Envía acuse automático al remitente con agradecimiento y número de REQ.
 
 ## Requisitos
 
@@ -89,12 +90,45 @@ streamlit run app.py
 
 Abre en navegador la URL que indique Streamlit (normalmente `http://localhost:8501`).
 
+## Módulo de Reporte (solo lectura)
+
+Puedes ejecutar un segundo módulo ejecutivo, sin edición, en otra URL:
+
+```bash
+streamlit run report_app.py --server.port 8502
+```
+
+URL de reporte: `http://localhost:8502`
+
+Incluye:
+
+- Estado general (KPIs)
+- Gráfico resueltos vs pendientes
+- Gráfico por estado
+- Top 10 temas pendientes y resueltos
+- Tabla operativa de solo lectura
+
+## Scripts de operación
+
+Subir ambos servicios (gestión + reporte):
+
+```bash
+./scripts/up-services.sh
+```
+
+Bajar ambos servicios:
+
+```bash
+./scripts/down-services.sh
+```
+
 ## Operación
 
 1. En la barra lateral, presiona **Sincronizar correos no leídos**.
 2. La app creará automáticamente los `REQ` nuevos (evita duplicados por `Message-ID`).
-3. Revisa el reporte, filtra por estado y selecciona el `REQ`.
-4. Carga respuesta y actualiza estado.
+3. Por cada REQ nuevo, la app enviará un correo de acuse al remitente con su número de requerimiento.
+4. Revisa el reporte, filtra por estado y selecciona el `REQ`.
+5. Carga respuesta y actualiza estado.
 
 ## Base de datos
 

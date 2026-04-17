@@ -52,7 +52,7 @@ def _resolve_imap_config() -> tuple[str, str, str, str, str]:
     if gmail_user and gmail_password:
         return ("Gmail", "imap.gmail.com", gmail_user, gmail_password, gmail_folder)
 
-    # Modo IMAP genérico (Outlook, Exchange, etc.)
+    # Modo IMAP genérico.
     host = _env("IMAP_HOST")
     user = _env("IMAP_USER")
     password = _env("IMAP_PASSWORD")
@@ -113,10 +113,15 @@ def _env(name: str) -> str:
 
 
 def sync_unseen_emails() -> list[EmailRequest]:
-    _, host, user, password, folder = _resolve_imap_config()
+    provider, host, user, password, folder = _resolve_imap_config()
 
     imap = imaplib.IMAP4_SSL(host)
-    imap.login(user, password)
+    try:
+        imap.login(user, password)
+    except imaplib.IMAP4.error as e:
+        raise EmailConfigError(
+            f"No fue posible autenticarse en {provider}. Verifica usuario/clave y configuración IMAP."
+        ) from e
 
     try:
         status, _ = imap.select(folder)

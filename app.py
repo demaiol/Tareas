@@ -127,59 +127,39 @@ def require_admin_login() -> bool:
 
 
 def sync_emails_ui() -> None:
-    with st.sidebar:
-        st.subheader("Integración de correo")
-        st.caption("Conectado vía IMAP/Gmail. Configurar variables en `.env`.")
-        st.caption(
-            "Persistencia recomendada: `DATABASE_URL` para usar PostgreSQL en producción."
-        )
+    if st.button("Sincronizar correos no leídos", use_container_width=False):
+        try:
+            parsed = sync_unseen_emails()
+            created = 0
+            duplicated = 0
+            ack_sent = 0
+            ack_failed = 0
+            for item in parsed:
+                req_code = create_requirement(item)
+                if req_code:
+                    created += 1
+                    try:
+                        send_acknowledgement(item, req_code)
+                        ack_sent += 1
+                    except EmailAckConfigError:
+                        # Sin SMTP configurado, no bloqueamos el alta del REQ.
+                        ack_failed += 1
+                    except Exception:  # noqa: BLE001
+                        ack_failed += 1
+                else:
+                    duplicated += 1
 
-        if st.button("Sincronizar correos no leídos", use_container_width=True):
-            try:
-                parsed = sync_unseen_emails()
-                created = 0
-                duplicated = 0
-                ack_sent = 0
-                ack_failed = 0
-                for item in parsed:
-                    req_code = create_requirement(item)
-                    if req_code:
-                        created += 1
-                        try:
-                            send_acknowledgement(item, req_code)
-                            ack_sent += 1
-                        except EmailAckConfigError:
-                            # Sin SMTP configurado, no bloqueamos el alta del REQ.
-                            ack_failed += 1
-                        except Exception:  # noqa: BLE001
-                            ack_failed += 1
-                    else:
-                        duplicated += 1
-
-                st.success(
-                    f"Sincronización finalizada. Nuevos: {created} | Duplicados ignorados: {duplicated}"
+            st.success(
+                f"Sincronización finalizada. Nuevos: {created} | Duplicados ignorados: {duplicated}"
+            )
+            if created > 0:
+                st.info(
+                    f"Acuses enviados: {ack_sent} | Acuses con error: {ack_failed}"
                 )
-                if created > 0:
-                    st.info(
-                        f"Acuses enviados: {ack_sent} | Acuses con error: {ack_failed}"
-                    )
-            except EmailConfigError as e:
-                st.error(str(e))
-            except Exception as e:  # noqa: BLE001
-                st.error(f"Error al sincronizar correos: {e}")
-
-        st.caption(
-            "Modo Gmail: `GMAIL_USER`, `GMAIL_APP_PASSWORD` (opcional `GMAIL_FOLDER`)."
-        )
-        st.caption(
-            "Modo IMAP: `IMAP_HOST`, `IMAP_USER`, `IMAP_PASSWORD` (opcional `IMAP_FOLDER`)."
-        )
-        st.caption(
-            "Acuse automático: usa Gmail SMTP con `GMAIL_*` o SMTP genérico con `SMTP_*`."
-        )
-        st.caption(
-            "Al pasar un REQ a `Resuelto`, se envía correo de cierre al solicitante."
-        )
+        except EmailConfigError as e:
+            st.error(str(e))
+        except Exception as e:  # noqa: BLE001
+            st.error(f"Error al sincronizar correos: {e}")
 
 
 def build_table(rows: list) -> pd.DataFrame:

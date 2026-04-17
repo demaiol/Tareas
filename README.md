@@ -153,6 +153,13 @@ python3 scripts/migrate-to-postgres.py
 5. Revisa el reporte, filtra por estado y selecciona el `REQ`.
 6. Carga respuesta y actualiza estado.
 
+## Usuarios de acceso (tabla `users`)
+
+La app crea automáticamente usuarios base en la tabla `users` al iniciar:
+
+- `Administrador` / `DEMO123$` (módulo Administrador)
+- `gestion` / `gestion123$` (módulo Reportes)
+
 ## Base de datos
 
 Se crea automáticamente `req_manager.db` (SQLite) en el directorio del proyecto.

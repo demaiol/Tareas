@@ -7,11 +7,9 @@ import pandas as pd
 import streamlit as st
 from zoneinfo import ZoneInfo
 
-from req_manager.db import ensure_schema, get_metrics, list_requirements
+from req_manager.db import authenticate_user, ensure_schema, get_metrics, list_requirements
 
 TZ = ZoneInfo("America/Santiago")
-REPORT_USER = "gestion"
-REPORT_PASSWORD = "gestion123$"
 
 st.set_page_config(
     page_title="Reporte Ejecutivo de Requerimientos",
@@ -75,7 +73,7 @@ def require_report_login() -> bool:
         submitted = st.form_submit_button("Ingresar", use_container_width=True)
 
     if submitted:
-        if username == REPORT_USER and password == REPORT_PASSWORD:
+        if authenticate_user(username, password, role="report"):
             st.session_state["report_authenticated"] = True
             st.success("Autenticación correcta.")
             st.rerun()
@@ -289,10 +287,11 @@ def render_read_only_table(rows: list) -> None:
 
 
 def main() -> None:
+    ensure_schema()
+
     if not require_report_login():
         return
 
-    ensure_schema()
     rows = list_requirements("Todos")
     metrics = get_metrics()
 

@@ -10,6 +10,10 @@ from zoneinfo import ZoneInfo
 
 DB_PATH = "req_manager.db"
 TZ = ZoneInfo("America/Santiago")
+DEFAULT_USERS = [
+    ("Administrador", "DEMO123$", "admin"),
+    ("gestion", "gestion123$", "report"),
+]
 
 
 @dataclass
@@ -113,6 +117,27 @@ def ensure_schema() -> None:
                 cur.execute(
                     "UPDATE requirements SET status = 'En progreso' WHERE status = 'Vencido'"
                 )
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS users (
+                        id BIGSERIAL PRIMARY KEY,
+                        username TEXT UNIQUE NOT NULL,
+                        password TEXT NOT NULL,
+                        role TEXT NOT NULL,
+                        active BOOLEAN NOT NULL DEFAULT TRUE,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
+                for username, password, role in DEFAULT_USERS:
+                    cur.execute(
+                        """
+                        INSERT INTO users (username, password, role, active)
+                        VALUES (%s, %s, %s, TRUE)
+                        ON CONFLICT (username) DO NOTHING
+                        """,
+                        (username, password, role),
+                    )
             conn.commit()
             return
 
@@ -140,6 +165,27 @@ def ensure_schema() -> None:
         conn.execute(
             "UPDATE requirements SET status = 'En progreso' WHERE status = 'Vencido'"
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                role TEXT NOT NULL,
+                active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        now = now_iso()
+        for username, password, role in DEFAULT_USERS:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO users (username, password, role, active, created_at)
+                VALUES (?, ?, ?, 1, ?)
+                """,
+                (username, password, role, now),
+            )
         conn.commit()
 
 
@@ -376,3 +422,66 @@ def get_metrics() -> dict[str, int]:
         "En progreso": progreso,
         "Resuelto": resuelto,
     }
+
+
+def authenticate_user(username: str, password: str, role: str | None = None) -> bool:
+    username = username.strip()
+    if not username or not password:
+        return False
+
+    with get_conn() as conn:
+        if _is_postgres():
+            with conn.cursor() as cur:
+                if role:
+                    cur.execute(
+                        """
+                        SELECT 1
+                        FROM users
+                        WHERE username = %s
+                          AND password = %s
+                          AND role = %s
+                          AND active = TRUE
+                        LIMIT 1
+                        """,
+                        (username, password, role),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        SELECT 1
+                        FROM users
+                        WHERE username = %s
+                          AND password = %s
+                          AND active = TRUE
+                        LIMIT 1
+                        """,
+                        (username, password),
+                    )
+                return cur.fetchone() is not None
+
+        if role:
+            row = conn.execute(
+                """
+                SELECT 1
+                FROM users
+                WHERE username = ?
+                  AND password = ?
+                  AND role = ?
+                  AND active = 1
+                LIMIT 1
+                """,
+                (username, password, role),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                """
+                SELECT 1
+                FROM users
+                WHERE username = ?
+                  AND password = ?
+                  AND active = 1
+                LIMIT 1
+                """,
+                (username, password),
+            ).fetchone()
+        return row is not None

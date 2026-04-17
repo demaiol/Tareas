@@ -9,6 +9,7 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from req_manager.db import (
+    authenticate_user,
     create_requirement,
     ensure_schema,
     get_metrics,
@@ -25,8 +26,6 @@ from req_manager.email_ingest import EmailConfigError, sync_unseen_emails
 
 TZ = ZoneInfo("America/Santiago")
 load_dotenv()
-ADMIN_USER = "Administrador"
-ADMIN_PASSWORD = "DEMO123$"
 
 st.set_page_config(
     page_title="Gestor de Requerimientos",
@@ -116,7 +115,7 @@ def require_admin_login() -> bool:
         submitted = st.form_submit_button("Ingresar", use_container_width=True)
 
     if submitted:
-        if username == ADMIN_USER and password == ADMIN_PASSWORD:
+        if authenticate_user(username, password, role="admin"):
             st.session_state["admin_authenticated"] = True
             st.success("Autenticación correcta.")
             st.rerun()
@@ -267,10 +266,11 @@ def requirement_editor(req_code: str) -> None:
 
 
 def main() -> None:
+    ensure_schema()
+
     if not require_admin_login():
         return
 
-    ensure_schema()
     sync_emails_ui()
 
     st.title("Gestor de Requerimientos")

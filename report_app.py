@@ -261,11 +261,11 @@ def render_charts(metrics: dict[str, int], rows: list) -> None:
             st.altair_chart(resolved_chart, use_container_width=True)
 
 
-def render_read_only_table(rows: list) -> None:
+def render_read_only_table(rows: list) -> str | None:
     st.subheader("Detalle operativo (solo lectura)")
     if not rows:
         st.info("No hay requerimientos registrados todavía.")
-        return
+        return None
 
     df = pd.DataFrame(
         [
@@ -283,7 +283,60 @@ def render_read_only_table(rows: list) -> None:
             for r in rows
         ]
     )
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    table_event = st.dataframe(
+        df,
+        use_container_width=True,
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row",
+        key="report_req_table",
+    )
+    selected_rows = getattr(getattr(table_event, "selection", None), "rows", [])
+    if selected_rows:
+        selected_req = str(df.iloc[selected_rows[0]]["REQ"])
+        st.session_state["report_selected_req"] = selected_req
+        return selected_req
+
+    return st.session_state.get("report_selected_req")
+
+
+def render_requirement_resolution(rows: list, req_code: str | None) -> None:
+    if not req_code:
+        st.caption("Selecciona una fila para ver detalle y resolución del requerimiento.")
+        return
+
+    selected = next((r for r in rows if str(r["req_code"]) == str(req_code)), None)
+    if not selected:
+        st.caption("Selecciona una fila para ver detalle y resolución del requerimiento.")
+        return
+
+    st.markdown("### Detalle de Requerimiento")
+    c1, c2 = st.columns(2)
+    c1.write(f"**REQ:** {selected['req_code']}")
+    c2.write(f"**Estado:** {selected['status']}")
+
+    c3, c4 = st.columns(2)
+    c3.write(
+        f"**Solicitante:** {selected['requester_name']} ({selected['requester_email']})"
+    )
+    c4.write(f"**Asignado:** {selected['assignee']}")
+
+    c5, c6, c7 = st.columns(3)
+    c5.write(f"**Fecha alta:** {format_dt(selected['created_at'])}")
+    c6.write(f"**Fecha vencimiento:** {format_dt(selected['due_at'])}")
+    c7.write(f"**Última actualización:** {format_dt(selected['updated_at'])}")
+
+    st.write(f"**Tema:** {selected['title']}")
+    st.text_area("Detalle original", selected["detail"], height=140, disabled=True)
+
+    st.write(f"**Resuelto por:** {selected.get('resolved_by') or '-'}")
+    st.write(f"**Fecha de cierre:** {format_dt(selected.get('resolved_at'))}")
+    st.text_area(
+        "Resolución registrada",
+        selected.get("response") or "Sin resolución registrada.",
+        height=140,
+        disabled=True,
+    )
 
 
 def main() -> None:
@@ -310,7 +363,9 @@ def main() -> None:
     st.write("")
     render_charts(metrics, rows)
     st.write("")
-    render_read_only_table(rows)
+    selected_req = render_read_only_table(rows)
+    st.write("")
+    render_requirement_resolution(rows, selected_req)
 
 
 if __name__ == "__main__":

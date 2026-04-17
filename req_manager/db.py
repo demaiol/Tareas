@@ -129,14 +129,37 @@ def ensure_schema() -> None:
                     )
                     """
                 )
+                # Alineamos secuencias para evitar colisiones de PK al insertar.
+                cur.execute(
+                    """
+                    SELECT setval(
+                        pg_get_serial_sequence('requirements', 'id'),
+                        COALESCE(MAX(id), 1),
+                        TRUE
+                    )
+                    FROM requirements
+                    """
+                )
+                cur.execute(
+                    """
+                    SELECT setval(
+                        pg_get_serial_sequence('users', 'id'),
+                        COALESCE(MAX(id), 1),
+                        TRUE
+                    )
+                    FROM users
+                    """
+                )
                 for username, password, role in DEFAULT_USERS:
                     cur.execute(
                         """
                         INSERT INTO users (username, password, role, active)
-                        VALUES (%s, %s, %s, TRUE)
-                        ON CONFLICT (username) DO NOTHING
+                        SELECT %s, %s, %s, TRUE
+                        WHERE NOT EXISTS (
+                            SELECT 1 FROM users WHERE username = %s
+                        )
                         """,
-                        (username, password, role),
+                        (username, password, role, username),
                     )
             conn.commit()
             return

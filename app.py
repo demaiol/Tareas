@@ -99,6 +99,9 @@ def sync_emails_ui() -> None:
     with st.sidebar:
         st.subheader("Integración de correo")
         st.caption("Conectado vía IMAP/Gmail. Configurar variables en `.env`.")
+        st.caption(
+            "Persistencia recomendada: `DATABASE_URL` para usar PostgreSQL en producción."
+        )
 
         if st.button("Sincronizar correos no leídos", use_container_width=True):
             try:

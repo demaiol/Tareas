@@ -38,6 +38,17 @@ cp .env.example .env
 
 Completa `.env` con tus credenciales (Gmail o IMAP).
 
+## Persistencia con PostgreSQL (recomendado)
+
+Para no perder datos entre despliegues/reinicios en Streamlit Cloud, usa base externa:
+
+```env
+DATABASE_URL=postgresql://usuario:password@host:5432/base
+```
+
+Cuando `DATABASE_URL` existe, la app usa PostgreSQL automáticamente.
+Si no existe, usa `req_manager.db` local (SQLite).
+
 ## Configurar Gmail
 
 La app ya soporta lectura de casilla Gmail de forma nativa.
@@ -75,6 +86,7 @@ IMAP_FOLDER=INBOX
 4. En **App settings -> Secrets**, pega:
 
 ```toml
+DATABASE_URL = "postgresql://usuario:password@host:5432/base"
 GMAIL_USER = "requerimientosvistamar@gmail.com"
 GMAIL_APP_PASSWORD = "TU_APP_PASSWORD_16"
 GMAIL_FOLDER = "INBOX"
@@ -120,6 +132,15 @@ Bajar ambos servicios:
 
 ```bash
 ./scripts/down-services.sh
+```
+
+## Migrar datos de SQLite a PostgreSQL (una sola vez)
+
+Si ya tienes datos en `req_manager.db`, puedes migrarlos:
+
+```bash
+export DATABASE_URL="postgresql://usuario:password@host:5432/base"
+python3 scripts/migrate-to-postgres.py
 ```
 
 ## Operación

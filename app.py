@@ -25,6 +25,8 @@ from req_manager.email_ingest import EmailConfigError, sync_unseen_emails
 
 TZ = ZoneInfo("America/Santiago")
 load_dotenv()
+ADMIN_USER = "Administrador"
+ADMIN_PASSWORD = "DEMO123$"
 
 st.set_page_config(
     page_title="Gestor de Requerimientos",
@@ -99,6 +101,30 @@ def render_metrics() -> None:
 """,
             unsafe_allow_html=True,
         )
+
+
+def require_admin_login() -> bool:
+    if st.session_state.get("admin_authenticated", False):
+        return True
+
+    st.title("Acceso Administrador")
+    st.caption("Ingresa tus credenciales para administrar requerimientos.")
+
+    with st.form("admin_login_form", clear_on_submit=False):
+        username = st.text_input("Usuario")
+        password = st.text_input("Contraseña", type="password")
+        submitted = st.form_submit_button("Ingresar", use_container_width=True)
+
+    if submitted:
+        if username == ADMIN_USER and password == ADMIN_PASSWORD:
+            st.session_state["admin_authenticated"] = True
+            st.success("Autenticación correcta.")
+            st.rerun()
+        else:
+            st.error("Usuario o contraseña inválidos.")
+
+    st.info("Usuario demo: Administrador")
+    return False
 
 
 def sync_emails_ui() -> None:
@@ -241,6 +267,9 @@ def requirement_editor(req_code: str) -> None:
 
 
 def main() -> None:
+    if not require_admin_login():
+        return
+
     ensure_schema()
     sync_emails_ui()
 

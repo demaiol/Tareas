@@ -5,11 +5,13 @@ from datetime import datetime
 import altair as alt
 import pandas as pd
 import streamlit as st
+from dotenv import load_dotenv
 from zoneinfo import ZoneInfo
 
 from req_manager.db import authenticate_user, ensure_schema, get_metrics, list_requirements
 
 TZ = ZoneInfo("America/Santiago")
+load_dotenv()
 
 st.set_page_config(
     page_title="Reporte Ejecutivo de Requerimientos",

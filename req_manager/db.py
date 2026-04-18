@@ -447,6 +447,122 @@ def get_metrics() -> dict[str, int]:
     }
 
 
+def list_users() -> list[dict[str, Any]]:
+    with get_conn() as conn:
+        if _is_postgres():
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT username, role, active, created_at
+                    FROM users
+                    ORDER BY username ASC
+                    """
+                )
+                rows = cur.fetchall()
+            return _to_dict_list(rows)
+
+        rows = conn.execute(
+            """
+            SELECT username, role, active, created_at
+            FROM users
+            ORDER BY username ASC
+            """
+        ).fetchall()
+        return _to_dict_list(rows)
+
+
+def create_user(username: str, password: str, role: str, active: bool = True) -> bool:
+    username = username.strip()
+    password = password.strip()
+    role = role.strip()
+    if not username or not password or not role:
+        return False
+
+    with get_conn() as conn:
+        if _is_postgres():
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO users (username, password, role, active)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (username) DO NOTHING
+                    RETURNING username
+                    """,
+                    (username, password, role, active),
+                )
+                created = cur.fetchone() is not None
+            conn.commit()
+            return created
+
+        cur = conn.execute(
+            """
+            INSERT OR IGNORE INTO users (username, password, role, active, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (username, password, role, 1 if active else 0, now_iso()),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+
+
+def update_user(
+    username: str,
+    role: str,
+    active: bool,
+    new_password: str | None = None,
+) -> bool:
+    username = username.strip()
+    role = role.strip()
+    if not username or not role:
+        return False
+
+    with get_conn() as conn:
+        if _is_postgres():
+            with conn.cursor() as cur:
+                if new_password and new_password.strip():
+                    cur.execute(
+                        """
+                        UPDATE users
+                        SET role = %s, active = %s, password = %s
+                        WHERE username = %s
+                        """,
+                        (role, active, new_password.strip(), username),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        UPDATE users
+                        SET role = %s, active = %s
+                        WHERE username = %s
+                        """,
+                        (role, active, username),
+                    )
+                updated = cur.rowcount > 0
+            conn.commit()
+            return updated
+
+        if new_password and new_password.strip():
+            cur = conn.execute(
+                """
+                UPDATE users
+                SET role = ?, active = ?, password = ?
+                WHERE username = ?
+                """,
+                (role, 1 if active else 0, new_password.strip(), username),
+            )
+        else:
+            cur = conn.execute(
+                """
+                UPDATE users
+                SET role = ?, active = ?
+                WHERE username = ?
+                """,
+                (role, 1 if active else 0, username),
+            )
+        conn.commit()
+        return cur.rowcount > 0
+
+
 def authenticate_user(username: str, password: str, role: str | None = None) -> bool:
     username = username.strip()
     if not username or not password:

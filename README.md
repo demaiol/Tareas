@@ -118,18 +118,34 @@ Incluye:
 - Estado general (KPIs)
 - Gráfico resueltos vs pendientes
 - Gráfico por estado
-- Top 10 temas pendientes y resueltos
+- Gráfico de no resueltos por vencimiento (dentro de fecha vs excedidos)
 - Tabla operativa de solo lectura
+
+## Módulo de Administración de Usuarios
+
+Puedes ejecutar un tercer módulo para gestionar usuarios y roles:
+
+```bash
+streamlit run users_admin_app.py --server.port 8503
+```
+
+URL local de usuarios: `http://localhost:8503`
+
+Permite:
+
+- Ver usuarios registrados
+- Crear usuarios (rol `admin` o `report`)
+- Editar rol, estado activo y contraseña
 
 ## Scripts de operación
 
-Subir ambos servicios (gestión + reporte):
+Subir servicios (gestión + reporte + usuarios):
 
 ```bash
 ./scripts/up-services.sh
 ```
 
-Bajar ambos servicios:
+Bajar servicios:
 
 ```bash
 ./scripts/down-services.sh
@@ -146,7 +162,7 @@ python3 scripts/migrate-to-postgres.py
 
 ## Operación
 
-1. En la barra lateral, presiona **Sincronizar correos no leídos**.
+1. En el módulo Administrador, presiona **Sincronizar correos no leídos**.
 2. La app creará automáticamente los `REQ` nuevos (evita duplicados por `Message-ID`).
 3. Por cada REQ nuevo, la app enviará un correo de acuse al remitente con su número de requerimiento.
 4. Al cambiar un REQ a `Resuelto`, la app envía correo de cierre al solicitante.

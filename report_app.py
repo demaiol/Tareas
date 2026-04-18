@@ -120,6 +120,17 @@ def format_dt(value: str | datetime | None) -> str:
         return str(value)
 
 
+def to_dt(value: str | datetime | None) -> datetime | None:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+    try:
+        return datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def build_status_df(metrics: dict[str, int]) -> pd.DataFrame:
     pending = metrics["Total"] - metrics["Resuelto"]
     return pd.DataFrame(
@@ -140,46 +151,43 @@ def build_full_status_df(metrics: dict[str, int]) -> pd.DataFrame:
     )
 
 
-def build_topic_charts_df(rows: list) -> tuple[pd.DataFrame, pd.DataFrame]:
-    if not rows:
-        return pd.DataFrame(columns=["Tema", "Cantidad"]), pd.DataFrame(
-            columns=["Tema", "Cantidad"]
-        )
+def build_pending_due_df(rows: list) -> pd.DataFrame:
+    inside_due = 0
+    overdue = 0
+    now = datetime.now(TZ)
 
-    data = [
-        {
-            "Tema": r["title"],
-            "Estado": r["status"],
-        }
-        for r in rows
-    ]
-    df = pd.DataFrame(data)
+    for r in rows:
+        if r["status"] == "Resuelto":
+            continue
 
-    pending_df = (
-        df[df["Estado"].isin(["Nuevo", "En progreso"])]
-        .groupby("Tema", as_index=False)
-        .size()
-        .rename(columns={"size": "Cantidad"})
-        .sort_values("Cantidad", ascending=False)
-        .head(10)
+        due_at = to_dt(r.get("due_at"))
+        if due_at is None:
+            overdue += 1
+            continue
+
+        # Unificamos zona horaria para comparación estable.
+        if due_at.tzinfo is None:
+            due_at = due_at.replace(tzinfo=TZ)
+        else:
+            due_at = due_at.astimezone(TZ)
+
+        if due_at >= now:
+            inside_due += 1
+        else:
+            overdue += 1
+
+    return pd.DataFrame(
+        [
+            {"Grupo": "Dentro de vencimiento", "Cantidad": inside_due},
+            {"Grupo": "Excedidos de vencimiento", "Cantidad": overdue},
+        ]
     )
-
-    resolved_df = (
-        df[df["Estado"] == "Resuelto"]
-        .groupby("Tema", as_index=False)
-        .size()
-        .rename(columns={"size": "Cantidad"})
-        .sort_values("Cantidad", ascending=False)
-        .head(10)
-    )
-
-    return pending_df, resolved_df
 
 
 def render_charts(metrics: dict[str, int], rows: list) -> None:
     status_df = build_status_df(metrics)
     full_status_df = build_full_status_df(metrics)
-    pending_topics_df, resolved_topics_df = build_topic_charts_df(rows)
+    pending_due_df = build_pending_due_df(rows)
 
     col1, col2 = st.columns(2)
 
@@ -222,43 +230,28 @@ def render_charts(metrics: dict[str, int], rows: list) -> None:
         )
         st.altair_chart(bars, use_container_width=True)
 
-    col3, col4 = st.columns(2)
-
-    with col3:
-        st.subheader("Temas pendientes (Top 10)")
-        if pending_topics_df.empty:
-            st.info("No hay temas pendientes.")
-        else:
-            pending_chart = (
-                alt.Chart(pending_topics_df)
-                .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
-                .encode(
-                    x=alt.X("Cantidad:Q"),
-                    y=alt.Y("Tema:N", sort="-x"),
-                    color=alt.value("#f08a4b"),
-                    tooltip=["Tema", "Cantidad"],
-                )
-                .properties(height=360)
-            )
-            st.altair_chart(pending_chart, use_container_width=True)
-
-    with col4:
-        st.subheader("Temas resueltos (Top 10)")
-        if resolved_topics_df.empty:
-            st.info("Aún no hay temas resueltos.")
-        else:
-            resolved_chart = (
-                alt.Chart(resolved_topics_df)
-                .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
-                .encode(
-                    x=alt.X("Cantidad:Q"),
-                    y=alt.Y("Tema:N", sort="-x"),
-                    color=alt.value("#2c9f7a"),
-                    tooltip=["Tema", "Cantidad"],
-                )
-                .properties(height=360)
-            )
-            st.altair_chart(resolved_chart, use_container_width=True)
+    st.subheader("Requerimientos no resueltos por vencimiento")
+    pending_due_chart = (
+        alt.Chart(pending_due_df)
+        .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
+        .encode(
+            x=alt.X(
+                "Grupo:N",
+                sort=["Dentro de vencimiento", "Excedidos de vencimiento"],
+            ),
+            y=alt.Y("Cantidad:Q"),
+            color=alt.Color(
+                "Grupo:N",
+                scale=alt.Scale(
+                    domain=["Dentro de vencimiento", "Excedidos de vencimiento"],
+                    range=["#2c9f7a", "#d64545"],
+                ),
+            ),
+            tooltip=["Grupo", "Cantidad"],
+        )
+        .properties(height=320)
+    )
+    st.altair_chart(pending_due_chart, use_container_width=True)
 
 
 def render_read_only_table(rows: list) -> str | None:

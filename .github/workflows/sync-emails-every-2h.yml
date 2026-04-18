@@ -28,4 +28,4 @@ jobs:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           GMAIL_FOLDER: ${{ secrets.GMAIL_FOLDER }}
-        run: python scripts/sync_emails_job.py
+        run: PYTHONPATH=. python scripts/sync_emails_job.py

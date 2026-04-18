@@ -151,6 +151,23 @@ Bajar servicios:
 ./scripts/down-services.sh
 ```
 
+## Sincronización automática cada 2 horas (sin usuarios conectados)
+
+Se agregó un workflow de GitHub Actions que ejecuta la sincronización de correos cada 2 horas:
+
+- Archivo: `.github/workflows/sync-emails-every-2h.yml`
+- Script ejecutado: `scripts/sync_emails_job.py`
+- Frecuencia: cada 2 horas (`0 */2 * * *`, horario UTC)
+
+Configura estos **Repository Secrets** en GitHub:
+
+- `DATABASE_URL`
+- `GMAIL_USER`
+- `GMAIL_APP_PASSWORD`
+- `GMAIL_FOLDER` (opcional, normalmente `INBOX`)
+
+Con esto, la ingestión de correos ocurre en segundo plano aunque Streamlit esté sin usuarios activos.
+
 ## Migrar datos de SQLite a PostgreSQL (una sola vez)
 
 Si ya tienes datos en `req_manager.db`, puedes migrarlos:

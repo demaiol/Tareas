@@ -173,8 +173,8 @@ def build_table(rows: list) -> pd.DataFrame:
                 "Correo": r["requester_email"],
                 "Título": r["title"],
                 "Asignado": r["assignee"],
-                "Alta": format_dt(r["created_at"]),
-                "Vencimiento": format_dt(r["due_at"]),
+                "Fecha de Ingreso": format_dt(r["created_at"]),
+                "Fecha Objetivo": format_dt(r["due_at"]),
                 "Actualizado": format_dt(r["updated_at"]),
             }
         )
@@ -196,8 +196,8 @@ def requirement_editor(req_code: str) -> None:
 
     c3, c4, c5 = st.columns(3)
     c3.write(f"**Estado actual:** {req['status']}")
-    c4.write(f"**Fecha alta:** {format_dt(req['created_at'])}")
-    c5.write(f"**Vencimiento:** {format_dt(req['due_at'])}")
+    c4.write(f"**Fecha de Ingreso:** {format_dt(req['created_at'])}")
+    c5.write(f"**Fecha Objetivo:** {format_dt(req['due_at'])}")
 
     st.write(f"**Título:** {req['title']}")
     st.text_area("Detalle original", req["detail"], height=160, disabled=True)

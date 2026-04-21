@@ -251,6 +251,29 @@ def ensure_schema() -> None:
                     )
                     """
                 )
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS requirements_deleted_backup (
+                        id BIGSERIAL PRIMARY KEY,
+                        req_code TEXT NOT NULL,
+                        requester_name TEXT NOT NULL,
+                        requester_email TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        detail TEXT NOT NULL,
+                        created_at TIMESTAMPTZ NOT NULL,
+                        due_at TIMESTAMPTZ NOT NULL,
+                        assignee TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        response TEXT,
+                        resolved_by TEXT,
+                        resolved_at TIMESTAMPTZ,
+                        source_message_id TEXT,
+                        updated_at TIMESTAMPTZ NOT NULL,
+                        deleted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        deleted_by TEXT NOT NULL
+                    )
+                    """
+                )
                 # Alineamos secuencias para evitar colisiones de PK al insertar.
                 cur.execute(
                     """
@@ -290,6 +313,16 @@ def ensure_schema() -> None:
                         TRUE
                     )
                     FROM audit_log_events
+                    """
+                )
+                cur.execute(
+                    """
+                    SELECT setval(
+                        pg_get_serial_sequence('requirements_deleted_backup', 'id'),
+                        COALESCE(MAX(id), 1),
+                        TRUE
+                    )
+                    FROM requirements_deleted_backup
                     """
                 )
                 for username, password, role in DEFAULT_USERS:
@@ -362,6 +395,29 @@ def ensure_schema() -> None:
                 entity_id TEXT,
                 detail TEXT,
                 created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS requirements_deleted_backup (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                req_code TEXT NOT NULL,
+                requester_name TEXT NOT NULL,
+                requester_email TEXT NOT NULL,
+                title TEXT NOT NULL,
+                detail TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                due_at TEXT NOT NULL,
+                assignee TEXT NOT NULL,
+                status TEXT NOT NULL,
+                response TEXT,
+                resolved_by TEXT,
+                resolved_at TEXT,
+                source_message_id TEXT,
+                updated_at TEXT NOT NULL,
+                deleted_at TEXT NOT NULL,
+                deleted_by TEXT NOT NULL
             )
             """
         )
@@ -622,6 +678,75 @@ def delete_requirement(req_code: str, actor: str = "Administrador") -> bool:
 
     with get_conn() as conn:
         with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    req_code,
+                    requester_name,
+                    requester_email,
+                    title,
+                    detail,
+                    created_at,
+                    due_at,
+                    assignee,
+                    status,
+                    response,
+                    resolved_by,
+                    resolved_at,
+                    source_message_id,
+                    updated_at
+                FROM requirements
+                WHERE req_code = %s
+                LIMIT 1
+                """,
+                (code,),
+            )
+            req = cur.fetchone()
+            if not req:
+                return False
+
+            cur.execute(
+                """
+                INSERT INTO requirements_deleted_backup (
+                    req_code,
+                    requester_name,
+                    requester_email,
+                    title,
+                    detail,
+                    created_at,
+                    due_at,
+                    assignee,
+                    status,
+                    response,
+                    resolved_by,
+                    resolved_at,
+                    source_message_id,
+                    updated_at,
+                    deleted_at,
+                    deleted_by
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                )
+                """,
+                (
+                    req["req_code"],
+                    req["requester_name"],
+                    req["requester_email"],
+                    req["title"],
+                    req["detail"],
+                    req["created_at"],
+                    req["due_at"],
+                    req["assignee"],
+                    req["status"],
+                    req["response"],
+                    req["resolved_by"],
+                    req["resolved_at"],
+                    req["source_message_id"],
+                    req["updated_at"],
+                    datetime.now(TZ),
+                    actor,
+                ),
+            )
             cur.execute(
                 """
                 DELETE FROM requirements

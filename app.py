@@ -15,6 +15,7 @@ from req_manager.db import (
     get_metrics,
     get_requirement,
     list_requirements,
+    register_admin_login,
     update_requirement,
 )
 from req_manager.email_ack import (
@@ -116,6 +117,7 @@ def require_admin_login() -> bool:
 
     if submitted:
         if authenticate_user(username, password, role="admin"):
+            register_admin_login(username, _detect_client_ip())
             st.session_state["admin_authenticated"] = True
             st.success("Autenticación correcta.")
             st.rerun()
@@ -124,6 +126,29 @@ def require_admin_login() -> bool:
 
     st.info("Usuario demo: Administrador")
     return False
+
+
+def _detect_client_ip() -> str:
+    try:
+        context = st.context
+        if context is None:
+            return "No disponible"
+
+        ip_direct = getattr(context, "ip_address", None)
+        if ip_direct:
+            return str(ip_direct)
+
+        headers = getattr(context, "headers", None)
+        if headers:
+            xff = headers.get("X-Forwarded-For") or headers.get("x-forwarded-for")
+            if xff:
+                return str(xff).split(",")[0].strip()
+            real_ip = headers.get("X-Real-Ip") or headers.get("x-real-ip")
+            if real_ip:
+                return str(real_ip).strip()
+    except Exception:  # noqa: BLE001
+        return "No disponible"
+    return "No disponible"
 
 
 def sync_emails_ui() -> None:

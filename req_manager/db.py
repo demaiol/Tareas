@@ -51,19 +51,23 @@ def _require_psycopg():
         ) from exc
 
 
+def _require_database_url() -> str:
+    url = _database_url()
+    if not url:
+        raise RuntimeError(
+            "Falta DATABASE_URL. Esta aplicación está configurada para usar PostgreSQL."
+        )
+    if not _is_postgres():
+        raise RuntimeError(
+            "DATABASE_URL inválida. Debe iniciar con postgres:// o postgresql://"
+        )
+    return url
+
+
 @contextmanager
 def get_conn() -> Iterator[Any]:
-    if _is_postgres():
-        psycopg, dict_row = _require_psycopg()
-        conn = psycopg.connect(_database_url(), row_factory=dict_row)
-        try:
-            yield conn
-        finally:
-            conn.close()
-        return
-
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    psycopg, dict_row = _require_psycopg()
+    conn = psycopg.connect(_require_database_url(), row_factory=dict_row)
     try:
         yield conn
     finally:
@@ -75,8 +79,6 @@ def _to_dict(row: Any) -> dict[str, Any]:
         return {}
     if isinstance(row, dict):
         return row
-    if isinstance(row, sqlite3.Row):
-        return dict(row)
     return dict(row)
 
 
@@ -129,6 +131,16 @@ def ensure_schema() -> None:
                     )
                     """
                 )
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS admin_login_events (
+                        id BIGSERIAL PRIMARY KEY,
+                        username TEXT NOT NULL,
+                        ip_address TEXT NOT NULL,
+                        logged_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
                 # Alineamos secuencias para evitar colisiones de PK al insertar.
                 cur.execute(
                     """
@@ -148,6 +160,16 @@ def ensure_schema() -> None:
                         TRUE
                     )
                     FROM users
+                    """
+                )
+                cur.execute(
+                    """
+                    SELECT setval(
+                        pg_get_serial_sequence('admin_login_events', 'id'),
+                        COALESCE(MAX(id), 1),
+                        TRUE
+                    )
+                    FROM admin_login_events
                     """
                 )
                 for username, password, role in DEFAULT_USERS:
@@ -197,6 +219,16 @@ def ensure_schema() -> None:
                 role TEXT NOT NULL,
                 active INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS admin_login_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                ip_address TEXT NOT NULL,
+                logged_at TEXT NOT NULL
             )
             """
         )
@@ -624,3 +656,61 @@ def authenticate_user(username: str, password: str, role: str | None = None) -> 
                 (username, password),
             ).fetchone()
         return row is not None
+
+
+def register_admin_login(username: str, ip_address: str) -> None:
+    username = username.strip()
+    ip = (ip_address or "").strip() or "No disponible"
+    if not username:
+        return
+
+    with get_conn() as conn:
+        if _is_postgres():
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO admin_login_events (username, ip_address, logged_at)
+                    VALUES (%s, %s, %s)
+                    """,
+                    (username, ip, datetime.now(TZ)),
+                )
+            conn.commit()
+            return
+
+        conn.execute(
+            """
+            INSERT INTO admin_login_events (username, ip_address, logged_at)
+            VALUES (?, ?, ?)
+            """,
+            (username, ip, now_iso()),
+        )
+        conn.commit()
+
+
+def list_admin_logins(limit: int = 50) -> list[dict[str, Any]]:
+    safe_limit = max(1, min(int(limit), 500))
+    with get_conn() as conn:
+        if _is_postgres():
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT username, ip_address, logged_at
+                    FROM admin_login_events
+                    ORDER BY logged_at DESC
+                    LIMIT %s
+                    """,
+                    (safe_limit,),
+                )
+                rows = cur.fetchall()
+            return _to_dict_list(rows)
+
+        rows = conn.execute(
+            """
+            SELECT username, ip_address, logged_at
+            FROM admin_login_events
+            ORDER BY datetime(logged_at) DESC
+            LIMIT ?
+            """,
+            (safe_limit,),
+        ).fetchall()
+        return _to_dict_list(rows)

@@ -8,7 +8,13 @@ import streamlit as st
 from dotenv import load_dotenv
 from zoneinfo import ZoneInfo
 
-from req_manager.db import authenticate_user, ensure_schema, get_metrics, list_requirements
+from req_manager.db import (
+    authenticate_user,
+    ensure_schema,
+    get_metrics,
+    list_admin_logins,
+    list_requirements,
+)
 
 TZ = ZoneInfo("America/Santiago")
 load_dotenv()
@@ -334,6 +340,26 @@ def render_requirement_resolution(rows: list, req_code: str | None) -> None:
     )
 
 
+def render_admin_logins() -> None:
+    st.subheader("Últimos logins en Administrador")
+    logs = list_admin_logins(limit=50)
+    if not logs:
+        st.caption("No hay logins registrados todavía.")
+        return
+
+    df = pd.DataFrame(
+        [
+            {
+                "Usuario": r.get("username", "-"),
+                "IP": r.get("ip_address", "No disponible"),
+                "Día y Hora": format_dt(r.get("logged_at")),
+            }
+            for r in logs
+        ]
+    )
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+
 def main() -> None:
     ensure_schema()
 
@@ -361,6 +387,8 @@ def main() -> None:
     selected_req = render_read_only_table(rows)
     st.write("")
     render_requirement_resolution(rows, selected_req)
+    st.write("")
+    render_admin_logins()
 
 
 if __name__ == "__main__":

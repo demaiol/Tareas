@@ -3,12 +3,13 @@ from __future__ import annotations
 import email
 import imaplib
 import os
+import re
 from email.header import decode_header, make_header
 from email.message import Message
 from email.utils import parseaddr
 from typing import Iterable
 
-from req_manager.db import EmailRequest
+from req_manager.db import EmailRequest, normalize_message_id
 
 try:
     import streamlit as st
@@ -99,8 +100,25 @@ def _build_request(msg: Message) -> EmailRequest:
         requester_email=sender_email or "desconocido@desconocido",
         title=subject,
         detail=detail,
-        source_message_id=msg.get("Message-ID"),
+        source_message_id=normalize_message_id(msg.get("Message-ID")),
+        reply_to_message_id=_extract_reply_to_message_id(msg),
     )
+
+
+def _extract_reply_to_message_id(msg: Message) -> str | None:
+    in_reply_to = normalize_message_id(msg.get("In-Reply-To"))
+    if in_reply_to:
+        return in_reply_to
+
+    references = str(msg.get("References", "") or "").strip()
+    if not references:
+        return None
+
+    message_ids = re.findall(r"<[^>]+>", references)
+    if message_ids:
+        return normalize_message_id(message_ids[-1])
+
+    return normalize_message_id(references)
 
 
 def _env(name: str) -> str:

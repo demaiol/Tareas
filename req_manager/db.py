@@ -17,6 +17,7 @@ DEFAULT_USERS = [
     ("Administrador", "DEMO123$", ROLE_ADMIN),
     ("gestion", "gestion123$", ROLE_REPORTES),
 ]
+IGNORED_SENDER_EMAILS = {"comunidadvistamar810@gmail.com"}
 
 
 @dataclass
@@ -26,6 +27,7 @@ class EmailRequest:
     title: str
     detail: str
     source_message_id: str | None = None
+    reply_to_message_id: str | None = None
     assignee: str = "Administrador"
 
 
@@ -103,6 +105,45 @@ def _to_dict_list(rows: list[Any]) -> list[dict[str, Any]]:
 
 def now_iso() -> str:
     return datetime.now(TZ).isoformat(timespec="seconds")
+
+
+def normalize_message_id(value: str | None) -> str | None:
+    if not value:
+        return None
+    msg_id = str(value).strip()
+    if not msg_id:
+        return None
+
+    if "<" in msg_id and ">" in msg_id:
+        start = msg_id.find("<")
+        end = msg_id.find(">", start + 1)
+        if end > start:
+            return msg_id[start : end + 1]
+    return msg_id
+
+
+def _is_ignored_sender(email: str | None) -> bool:
+    value = (email or "").strip().lower()
+    return value in IGNORED_SENDER_EMAILS
+
+
+def requirement_exists_by_source_message_id(message_id: str | None) -> bool:
+    normalized = normalize_message_id(message_id)
+    if not normalized:
+        return False
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT 1
+                FROM requirements
+                WHERE source_message_id = %s
+                LIMIT 1
+                """,
+                (normalized,),
+            )
+            return cur.fetchone() is not None
 
 
 def ensure_schema() -> None:
@@ -269,16 +310,23 @@ def ensure_schema() -> None:
 
 
 def create_requirement(item: EmailRequest) -> str | None:
+    if _is_ignored_sender(item.requester_email):
+        return None
+
+    if requirement_exists_by_source_message_id(item.reply_to_message_id):
+        return None
+
+    source_message_id = normalize_message_id(item.source_message_id)
     created = datetime.now(TZ)
     due = created + timedelta(hours=48)
 
     with get_conn() as conn:
         if _is_postgres():
             with conn.cursor() as cur:
-                if item.source_message_id:
+                if source_message_id:
                     cur.execute(
                         "SELECT req_code FROM requirements WHERE source_message_id = %s",
-                        (item.source_message_id,),
+                        (source_message_id,),
                     )
                     existing = cur.fetchone()
                     if existing:
@@ -309,7 +357,7 @@ def create_requirement(item: EmailRequest) -> str | None:
                         due,
                         item.assignee,
                         "Nuevo",
-                        item.source_message_id,
+                        source_message_id,
                         created,
                     ),
                 )
@@ -323,10 +371,10 @@ def create_requirement(item: EmailRequest) -> str | None:
             conn.commit()
             return req_code
 
-        if item.source_message_id:
+        if source_message_id:
             existing = conn.execute(
                 "SELECT req_code FROM requirements WHERE source_message_id = ?",
-                (item.source_message_id,),
+                (source_message_id,),
             ).fetchone()
             if existing:
                 return None
@@ -355,7 +403,7 @@ def create_requirement(item: EmailRequest) -> str | None:
                 due.isoformat(timespec="seconds"),
                 item.assignee,
                 "Nuevo",
-                item.source_message_id,
+                source_message_id,
                 created.isoformat(timespec="seconds"),
             ),
         )

@@ -13,7 +13,10 @@ from req_manager.db import (
     ROLE_REQUERIMIENTOS,
     authenticate_user,
     create_user,
+    delete_requirement,
     ensure_schema,
+    list_audit_logs,
+    list_requirements,
     list_users,
     normalize_role,
     update_user,
@@ -23,7 +26,7 @@ TZ = ZoneInfo("America/Santiago")
 load_dotenv()
 
 st.set_page_config(
-    page_title="Administración de Usuarios",
+    page_title="Admin Tool",
     page_icon="👥",
     layout="wide",
 )
@@ -65,7 +68,7 @@ def require_admin_login() -> bool:
     if st.session_state.get("users_admin_authenticated", False):
         return True
 
-    st.title("Acceso Administración de Usuarios")
+    st.title("Acceso Admin Tool")
     st.caption("Acceso restringido a usuarios con rol administrador.")
 
     with st.form("users_admin_login", clear_on_submit=False):
@@ -76,6 +79,7 @@ def require_admin_login() -> bool:
     if submitted:
         if authenticate_user(username, password, role=ROLE_ADMIN):
             st.session_state["users_admin_authenticated"] = True
+            st.session_state["users_admin_username"] = username.strip()
             st.success("Autenticación correcta.")
             st.rerun()
         else:
@@ -110,7 +114,13 @@ def create_user_form() -> None:
         submitted = st.form_submit_button("Crear usuario", use_container_width=True)
 
         if submitted:
-            created = create_user(new_user, new_password, new_role, new_active)
+            created = create_user(
+                new_user,
+                new_password,
+                new_role,
+                new_active,
+                actor=st.session_state.get("users_admin_username", "Admin"),
+            )
             if created:
                 st.success("Usuario creado correctamente.")
                 st.rerun()
@@ -156,7 +166,13 @@ def edit_user_form(users: list[dict]) -> None:
 
         submitted = st.form_submit_button("Guardar cambios", use_container_width=True)
         if submitted:
-            updated = update_user(selected_username, role, active, new_password)
+            updated = update_user(
+                selected_username,
+                role,
+                active,
+                new_password,
+                actor=st.session_state.get("users_admin_username", "Admin"),
+            )
             if updated:
                 st.success("Usuario actualizado correctamente.")
                 st.rerun()
@@ -166,13 +182,72 @@ def edit_user_form(users: list[dict]) -> None:
     st.markdown("</div>", unsafe_allow_html=True)
 
 
+def delete_requirement_form() -> None:
+    st.markdown('<div class="section-box">', unsafe_allow_html=True)
+    st.subheader("Borrar requerimiento")
+
+    rows = list_requirements("Todos")
+    if not rows:
+        st.info("No hay requerimientos para borrar.")
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
+
+    options = [f"{r['req_code']} | {r['status']} | {r['title']}" for r in rows]
+    selected = st.selectbox("Seleccionar requerimiento", options)
+    selected_req = selected.split(" | ", 1)[0].strip()
+    confirm = st.checkbox(
+        "Confirmo que quiero borrar este requerimiento de forma definitiva."
+    )
+
+    if st.button("Borrar requerimiento", type="primary", use_container_width=True):
+        if not confirm:
+            st.warning("Debes confirmar el borrado para continuar.")
+        else:
+            deleted = delete_requirement(
+                selected_req,
+                actor=st.session_state.get("users_admin_username", "Admin"),
+            )
+            if deleted:
+                st.success(f"Requerimiento {selected_req} eliminado.")
+                st.rerun()
+            else:
+                st.error("No se pudo borrar el requerimiento seleccionado.")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def logs_table(logs: list[dict]) -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "Día y Hora": format_dt(r.get("created_at")),
+                "Actor": r.get("actor", "-"),
+                "Acción": r.get("action", "-"),
+                "Entidad": r.get("entity_type", "-"),
+                "ID": r.get("entity_id", "-"),
+                "Detalle": r.get("detail", "-"),
+            }
+            for r in logs
+        ]
+    )
+
+
+def audit_logs_section() -> None:
+    st.subheader("Log de acciones")
+    logs = list_audit_logs(limit=200)
+    if not logs:
+        st.info("No hay eventos registrados todavía.")
+        return
+    st.dataframe(logs_table(logs), use_container_width=True, hide_index=True)
+
+
 def main() -> None:
     ensure_schema()
 
     if not require_admin_login():
         return
 
-    st.title("Administración de Usuarios")
+    st.title("Admin Tool")
     st.caption(
         f"Gestión de accesos | {datetime.now(TZ).strftime('%d-%m-%Y %H:%M')}"
     )
@@ -189,6 +264,11 @@ def main() -> None:
         create_user_form()
     with c2:
         edit_user_form(users)
+
+    st.write("")
+    delete_requirement_form()
+    st.write("")
+    audit_logs_section()
 
 
 if __name__ == "__main__":

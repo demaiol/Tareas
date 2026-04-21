@@ -146,6 +146,38 @@ def requirement_exists_by_source_message_id(message_id: str | None) -> bool:
             return cur.fetchone() is not None
 
 
+def register_audit_log(
+    actor: str,
+    action: str,
+    entity_type: str,
+    entity_id: str | None = None,
+    detail: str | None = None,
+) -> None:
+    actor_v = (actor or "").strip() or "Sistema"
+    action_v = (action or "").strip() or "Sin acción"
+    entity_type_v = (entity_type or "").strip() or "Desconocido"
+    entity_id_v = (entity_id or "").strip() or None
+    detail_v = (detail or "").strip() or None
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO audit_log_events (actor, action, entity_type, entity_id, detail, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    actor_v,
+                    action_v,
+                    entity_type_v,
+                    entity_id_v,
+                    detail_v,
+                    datetime.now(TZ),
+                ),
+            )
+        conn.commit()
+
+
 def ensure_schema() -> None:
     with get_conn() as conn:
         if _is_postgres():
@@ -206,6 +238,19 @@ def ensure_schema() -> None:
                     )
                     """
                 )
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS audit_log_events (
+                        id BIGSERIAL PRIMARY KEY,
+                        actor TEXT NOT NULL,
+                        action TEXT NOT NULL,
+                        entity_type TEXT NOT NULL,
+                        entity_id TEXT,
+                        detail TEXT,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
                 # Alineamos secuencias para evitar colisiones de PK al insertar.
                 cur.execute(
                     """
@@ -235,6 +280,16 @@ def ensure_schema() -> None:
                         TRUE
                     )
                     FROM admin_login_events
+                    """
+                )
+                cur.execute(
+                    """
+                    SELECT setval(
+                        pg_get_serial_sequence('audit_log_events', 'id'),
+                        COALESCE(MAX(id), 1),
+                        TRUE
+                    )
+                    FROM audit_log_events
                     """
                 )
                 for username, password, role in DEFAULT_USERS:
@@ -297,6 +352,19 @@ def ensure_schema() -> None:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS audit_log_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                actor TEXT NOT NULL,
+                action TEXT NOT NULL,
+                entity_type TEXT NOT NULL,
+                entity_id TEXT,
+                detail TEXT,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
         now = now_iso()
         for username, password, role in DEFAULT_USERS:
             conn.execute(
@@ -309,7 +377,7 @@ def ensure_schema() -> None:
         conn.commit()
 
 
-def create_requirement(item: EmailRequest) -> str | None:
+def create_requirement(item: EmailRequest, actor: str = "Sistema") -> str | None:
     if _is_ignored_sender(item.requester_email):
         return None
 
@@ -369,6 +437,13 @@ def create_requirement(item: EmailRequest) -> str | None:
                     (req_code, row_id),
                 )
             conn.commit()
+            register_audit_log(
+                actor=actor,
+                action="Crear requerimiento",
+                entity_type="Requerimiento",
+                entity_id=req_code,
+                detail=f"Título: {item.title}",
+            )
             return req_code
 
         if source_message_id:
@@ -413,6 +488,13 @@ def create_requirement(item: EmailRequest) -> str | None:
             "UPDATE requirements SET req_code = ? WHERE id = ?", (req_code, row_id)
         )
         conn.commit()
+        register_audit_log(
+            actor=actor,
+            action="Crear requerimiento",
+            entity_type="Requerimiento",
+            entity_id=req_code,
+            detail=f"Título: {item.title}",
+        )
         return req_code
 
 
@@ -468,7 +550,13 @@ def get_requirement(req_code: str) -> dict[str, Any] | None:
         return _to_dict(row) if row else None
 
 
-def update_requirement(req_code: str, status: str, response: str, resolved_by: str) -> None:
+def update_requirement(
+    req_code: str,
+    status: str,
+    response: str,
+    resolved_by: str,
+    actor: str = "Administrador",
+) -> None:
     ts = datetime.now(TZ)
     resolved_at = ts if status == "Resuelto" else None
 
@@ -484,6 +572,13 @@ def update_requirement(req_code: str, status: str, response: str, resolved_by: s
                     (status, response.strip(), resolved_by.strip(), resolved_at, ts, req_code),
                 )
             conn.commit()
+            register_audit_log(
+                actor=actor,
+                action="Actualizar requerimiento",
+                entity_type="Requerimiento",
+                entity_id=req_code,
+                detail=f"Estado: {status}",
+            )
             return
 
         conn.execute(
@@ -511,6 +606,39 @@ def update_requirement(req_code: str, status: str, response: str, resolved_by: s
             ),
         )
         conn.commit()
+        register_audit_log(
+            actor=actor,
+            action="Actualizar requerimiento",
+            entity_type="Requerimiento",
+            entity_id=req_code,
+            detail=f"Estado: {status}",
+        )
+
+
+def delete_requirement(req_code: str, actor: str = "Administrador") -> bool:
+    code = (req_code or "").strip()
+    if not code:
+        return False
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM requirements
+                WHERE req_code = %s
+                """,
+                (code,),
+            )
+            deleted = cur.rowcount > 0
+        conn.commit()
+        if deleted:
+            register_audit_log(
+                actor=actor,
+                action="Borrar requerimiento",
+                entity_type="Requerimiento",
+                entity_id=code,
+            )
+        return deleted
 
 
 def refresh_overdue_statuses() -> None:
@@ -575,7 +703,13 @@ def list_users() -> list[dict[str, Any]]:
         return _to_dict_list(rows)
 
 
-def create_user(username: str, password: str, role: str, active: bool = True) -> bool:
+def create_user(
+    username: str,
+    password: str,
+    role: str,
+    active: bool = True,
+    actor: str = "Admin",
+) -> bool:
     username = username.strip()
     password = password.strip()
     role = normalize_role(role)
@@ -596,6 +730,14 @@ def create_user(username: str, password: str, role: str, active: bool = True) ->
                 )
                 created = cur.fetchone() is not None
             conn.commit()
+            if created:
+                register_audit_log(
+                    actor=actor,
+                    action="Crear usuario",
+                    entity_type="Usuario",
+                    entity_id=username,
+                    detail=f"Rol: {role} | Activo: {active}",
+                )
             return created
 
         cur = conn.execute(
@@ -606,6 +748,14 @@ def create_user(username: str, password: str, role: str, active: bool = True) ->
             (username, password, role, 1 if active else 0, now_iso()),
         )
         conn.commit()
+        if cur.rowcount > 0:
+            register_audit_log(
+                actor=actor,
+                action="Crear usuario",
+                entity_type="Usuario",
+                entity_id=username,
+                detail=f"Rol: {role} | Activo: {active}",
+            )
         return cur.rowcount > 0
 
 
@@ -614,6 +764,7 @@ def update_user(
     role: str,
     active: bool,
     new_password: str | None = None,
+    actor: str = "Admin",
 ) -> bool:
     username = username.strip()
     role = normalize_role(role)
@@ -643,6 +794,14 @@ def update_user(
                     )
                 updated = cur.rowcount > 0
             conn.commit()
+            if updated:
+                register_audit_log(
+                    actor=actor,
+                    action="Actualizar usuario",
+                    entity_type="Usuario",
+                    entity_id=username,
+                    detail=f"Rol: {role} | Activo: {active}",
+                )
             return updated
 
         if new_password and new_password.strip():
@@ -664,6 +823,14 @@ def update_user(
                 (role, 1 if active else 0, username),
             )
         conn.commit()
+        if cur.rowcount > 0:
+            register_audit_log(
+                actor=actor,
+                action="Actualizar usuario",
+                entity_type="Usuario",
+                entity_id=username,
+                detail=f"Rol: {role} | Activo: {active}",
+            )
         return cur.rowcount > 0
 
 
@@ -768,4 +935,21 @@ def list_admin_logins(limit: int = 50) -> list[dict[str, Any]]:
             """,
             (safe_limit,),
         ).fetchall()
+        return _to_dict_list(rows)
+
+
+def list_audit_logs(limit: int = 200) -> list[dict[str, Any]]:
+    safe_limit = max(1, min(int(limit), 1000))
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT actor, action, entity_type, entity_id, detail, created_at
+                FROM audit_log_events
+                ORDER BY created_at DESC
+                LIMIT %s
+                """,
+                (safe_limit,),
+            )
+            rows = cur.fetchall()
         return _to_dict_list(rows)

@@ -125,6 +125,7 @@ def require_admin_login() -> bool:
         ):
             register_admin_login(username, _detect_client_ip())
             st.session_state["admin_authenticated"] = True
+            st.session_state["admin_username"] = username.strip()
             st.success("Autenticación correcta.")
             st.rerun()
         else:
@@ -165,8 +166,9 @@ def sync_emails_ui() -> None:
             duplicated = 0
             ack_sent = 0
             ack_failed = 0
+            actor = st.session_state.get("admin_username", "Administrador")
             for item in parsed:
-                req_code = create_requirement(item)
+                req_code = create_requirement(item, actor=actor)
                 if req_code:
                     created += 1
                     try:
@@ -253,7 +255,13 @@ def requirement_editor(req_code: str) -> None:
         submitted = st.form_submit_button("Guardar actualización", use_container_width=True)
         if submitted:
             closing_now = status == "Resuelto" and req["status"] != "Resuelto"
-            update_requirement(req_code, status, response, resolved_by)
+            update_requirement(
+                req_code,
+                status,
+                response,
+                resolved_by,
+                actor=st.session_state.get("admin_username", "Administrador"),
+            )
             st.success("Requerimiento actualizado correctamente.")
             if closing_now:
                 updated_req = get_requirement(req_code) or req

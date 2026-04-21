@@ -21,7 +21,7 @@ def main() -> int:
     ack_sent = 0
 
     for item in items:
-        req_code = create_requirement(item)
+        req_code = create_requirement(item, actor="Sync automático")
         if not req_code:
             continue
         created += 1

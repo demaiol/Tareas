@@ -201,7 +201,7 @@ La app crea automáticamente usuarios base en la tabla `users` al iniciar:
 
 ## Base de datos
 
-Se crea automáticamente `req_manager.db` (SQLite) en el directorio del proyecto.
+La aplicación opera sobre PostgreSQL usando `DATABASE_URL` (obligatoria).
 
 ## Sugerencias de producción
 

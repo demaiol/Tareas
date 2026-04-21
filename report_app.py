@@ -14,6 +14,8 @@ from req_manager.db import (
     get_metrics,
     list_admin_logins,
     list_requirements,
+    ROLE_ADMIN,
+    ROLE_REPORTES,
 )
 
 TZ = ZoneInfo("America/Santiago")
@@ -81,7 +83,11 @@ def require_report_login() -> bool:
         submitted = st.form_submit_button("Ingresar", use_container_width=True)
 
     if submitted:
-        if authenticate_user(username, password, role="report"):
+        if authenticate_user(
+            username,
+            password,
+            role=[ROLE_REPORTES, ROLE_ADMIN],
+        ):
             st.session_state["report_authenticated"] = True
             st.success("Autenticación correcta.")
             st.rerun()

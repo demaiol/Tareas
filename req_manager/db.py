@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -10,9 +9,13 @@ from zoneinfo import ZoneInfo
 
 DB_PATH = "req_manager.db"
 TZ = ZoneInfo("America/Santiago")
+ROLE_ADMIN = "Admin"
+ROLE_REQUERIMIENTOS = "Requeriemientos"
+ROLE_REPORTES = "Reportes"
+VALID_ROLES = {ROLE_ADMIN, ROLE_REQUERIMIENTOS, ROLE_REPORTES}
 DEFAULT_USERS = [
-    ("Administrador", "DEMO123$", "admin"),
-    ("gestion", "gestion123$", "report"),
+    ("Administrador", "DEMO123$", ROLE_ADMIN),
+    ("gestion", "gestion123$", ROLE_REPORTES),
 ]
 
 
@@ -29,6 +32,18 @@ class EmailRequest:
 def _database_url() -> str | None:
     value = os.getenv("DATABASE_URL", "").strip()
     return value or None
+
+
+def normalize_role(value: str | None) -> str:
+    role = (value or "").strip()
+    role_l = role.lower()
+    if role_l == "admin":
+        return ROLE_ADMIN
+    if role_l == "report":
+        return ROLE_REPORTES
+    if role_l in {"requerimientos", "requeriemientos"}:
+        return ROLE_REQUERIMIENTOS
+    return role
 
 
 def _is_postgres() -> bool:
@@ -130,6 +145,15 @@ def ensure_schema() -> None:
                         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                     )
                     """
+                )
+                cur.execute("UPDATE users SET role = %s WHERE lower(role) = 'admin'", (ROLE_ADMIN,))
+                cur.execute(
+                    "UPDATE users SET role = %s WHERE lower(role) = 'report'",
+                    (ROLE_REPORTES,),
+                )
+                cur.execute(
+                    "UPDATE users SET role = %s WHERE lower(role) = 'requerimientos'",
+                    (ROLE_REQUERIMIENTOS,),
                 )
                 cur.execute(
                     """
@@ -506,8 +530,8 @@ def list_users() -> list[dict[str, Any]]:
 def create_user(username: str, password: str, role: str, active: bool = True) -> bool:
     username = username.strip()
     password = password.strip()
-    role = role.strip()
-    if not username or not password or not role:
+    role = normalize_role(role)
+    if not username or not password or role not in VALID_ROLES:
         return False
 
     with get_conn() as conn:
@@ -544,8 +568,8 @@ def update_user(
     new_password: str | None = None,
 ) -> bool:
     username = username.strip()
-    role = role.strip()
-    if not username or not role:
+    role = normalize_role(role)
+    if not username or role not in VALID_ROLES:
         return False
 
     with get_conn() as conn:
@@ -595,67 +619,50 @@ def update_user(
         return cur.rowcount > 0
 
 
-def authenticate_user(username: str, password: str, role: str | None = None) -> bool:
+def authenticate_user(
+    username: str,
+    password: str,
+    role: str | list[str] | tuple[str, ...] | None = None,
+) -> bool:
     username = username.strip()
     if not username or not password:
         return False
 
-    with get_conn() as conn:
-        if _is_postgres():
-            with conn.cursor() as cur:
-                if role:
-                    cur.execute(
-                        """
-                        SELECT 1
-                        FROM users
-                        WHERE username = %s
-                          AND password = %s
-                          AND role = %s
-                          AND active = TRUE
-                        LIMIT 1
-                        """,
-                        (username, password, role),
-                    )
-                else:
-                    cur.execute(
-                        """
-                        SELECT 1
-                        FROM users
-                        WHERE username = %s
-                          AND password = %s
-                          AND active = TRUE
-                        LIMIT 1
-                        """,
-                        (username, password),
-                    )
-                return cur.fetchone() is not None
+    roles: list[str] | None = None
+    if role is not None:
+        role_values = [role] if isinstance(role, str) else list(role)
+        roles = [normalize_role(r) for r in role_values if normalize_role(r) in VALID_ROLES]
+        if not roles:
+            return False
 
-        if role:
-            row = conn.execute(
-                """
-                SELECT 1
-                FROM users
-                WHERE username = ?
-                  AND password = ?
-                  AND role = ?
-                  AND active = 1
-                LIMIT 1
-                """,
-                (username, password, role),
-            ).fetchone()
-        else:
-            row = conn.execute(
-                """
-                SELECT 1
-                FROM users
-                WHERE username = ?
-                  AND password = ?
-                  AND active = 1
-                LIMIT 1
-                """,
-                (username, password),
-            ).fetchone()
-        return row is not None
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            if roles:
+                cur.execute(
+                    """
+                    SELECT 1
+                    FROM users
+                    WHERE username = %s
+                      AND password = %s
+                      AND role = ANY(%s)
+                      AND active = TRUE
+                    LIMIT 1
+                    """,
+                    (username, password, roles),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT 1
+                    FROM users
+                    WHERE username = %s
+                      AND password = %s
+                      AND active = TRUE
+                    LIMIT 1
+                    """,
+                    (username, password),
+                )
+            return cur.fetchone() is not None
 
 
 def register_admin_login(username: str, ip_address: str) -> None:

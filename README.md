@@ -134,7 +134,7 @@ URL local de usuarios: `http://localhost:8503`
 Permite:
 
 - Ver usuarios registrados
-- Crear usuarios (rol `admin` o `report`)
+- Crear usuarios (rol `Admin`, `Requeriemientos` o `Reportes`)
 - Editar rol, estado activo y contraseña
 
 ## Scripts de operación
@@ -192,6 +192,12 @@ La app crea automáticamente usuarios base en la tabla `users` al iniciar:
 
 - `Administrador` / `DEMO123$` (módulo Administrador)
 - `gestion` / `gestion123$` (módulo Reportes)
+
+## Estructura de accesos por rol
+
+- `Requeriemientos`: acceso al módulo Administrador.
+- `Reportes`: acceso al módulo Reportes.
+- `Admin`: acceso a todos los módulos.
 
 ## Base de datos
 

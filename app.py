@@ -15,6 +15,8 @@ from req_manager.db import (
     get_metrics,
     get_requirement,
     list_requirements,
+    ROLE_ADMIN,
+    ROLE_REQUERIMIENTOS,
     register_admin_login,
     update_requirement,
 )
@@ -116,7 +118,11 @@ def require_admin_login() -> bool:
         submitted = st.form_submit_button("Ingresar", use_container_width=True)
 
     if submitted:
-        if authenticate_user(username, password, role="admin"):
+        if authenticate_user(
+            username,
+            password,
+            role=[ROLE_REQUERIMIENTOS, ROLE_ADMIN],
+        ):
             register_admin_login(username, _detect_client_ip())
             st.session_state["admin_authenticated"] = True
             st.success("Autenticación correcta.")

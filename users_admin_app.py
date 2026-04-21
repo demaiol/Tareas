@@ -7,7 +7,17 @@ import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 
-from req_manager.db import authenticate_user, create_user, ensure_schema, list_users, update_user
+from req_manager.db import (
+    ROLE_ADMIN,
+    ROLE_REPORTES,
+    ROLE_REQUERIMIENTOS,
+    authenticate_user,
+    create_user,
+    ensure_schema,
+    list_users,
+    normalize_role,
+    update_user,
+)
 
 TZ = ZoneInfo("America/Santiago")
 load_dotenv()
@@ -37,6 +47,9 @@ st.markdown(
 )
 
 
+ROLE_OPTIONS = [ROLE_ADMIN, ROLE_REQUERIMIENTOS, ROLE_REPORTES]
+
+
 def format_dt(value: str | datetime | None) -> str:
     if not value:
         return "-"
@@ -61,7 +74,7 @@ def require_admin_login() -> bool:
         submitted = st.form_submit_button("Ingresar", use_container_width=True)
 
     if submitted:
-        if authenticate_user(username, password, role="admin"):
+        if authenticate_user(username, password, role=ROLE_ADMIN):
             st.session_state["users_admin_authenticated"] = True
             st.success("Autenticación correcta.")
             st.rerun()
@@ -92,7 +105,7 @@ def create_user_form() -> None:
     with st.form("create_user_form", clear_on_submit=True):
         new_user = st.text_input("Nuevo usuario")
         new_password = st.text_input("Contraseña", type="password")
-        new_role = st.selectbox("Rol", ["admin", "report"])
+        new_role = st.selectbox("Rol", ROLE_OPTIONS)
         new_active = st.checkbox("Usuario activo", value=True)
         submitted = st.form_submit_button("Crear usuario", use_container_width=True)
 
@@ -124,14 +137,15 @@ def edit_user_form(users: list[dict]) -> None:
     if not selected:
         st.markdown("</div>", unsafe_allow_html=True)
         return
+    selected_role = normalize_role(selected.get("role"))
 
     with st.form("edit_user_form", clear_on_submit=False):
         role = st.selectbox(
             "Rol",
-            ["admin", "report"],
-            index=["admin", "report"].index(selected["role"])
-            if selected["role"] in {"admin", "report"}
-            else 1,
+            ROLE_OPTIONS,
+            index=ROLE_OPTIONS.index(selected_role)
+            if selected_role in ROLE_OPTIONS
+            else 0,
         )
         active = st.checkbox("Usuario activo", value=bool(selected["active"]))
         new_password = st.text_input(

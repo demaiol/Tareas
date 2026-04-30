@@ -17,6 +17,7 @@ from req_manager.db import (
     ROLE_ADMIN,
     ROLE_REPORTES,
 )
+from req_manager.ui import apply_dashboard_css
 
 TZ = ZoneInfo("America/Santiago")
 load_dotenv()
@@ -26,48 +27,7 @@ st.set_page_config(
     page_icon="📊",
     layout="wide",
 )
-
-st.markdown(
-    """
-<style>
-.main {
-    background: radial-gradient(circle at 12% 10%, #eefaf7, #f9fcff 36%, #ffffff 80%);
-}
-.block-container {
-    padding-top: 1.2rem;
-    padding-bottom: 2rem;
-}
-h1, h2, h3 {
-    font-family: "Avenir Next", "Helvetica Neue", sans-serif;
-    color: #153044;
-}
-.kpi-card {
-    border-radius: 14px;
-    border: 1px solid #dde9f1;
-    padding: 14px 16px;
-    background: white;
-    box-shadow: 0 7px 22px rgba(27, 74, 112, 0.10);
-}
-.kpi-label {
-    font-size: 0.9rem;
-    color: #547188;
-}
-.kpi-value {
-    font-size: 1.6rem;
-    font-weight: 700;
-    color: #10253f;
-}
-.info-box {
-    border-radius: 12px;
-    border: 1px solid #d9e8f4;
-    padding: 10px 12px;
-    background: #f5fbff;
-    color: #244965;
-}
-</style>
-""",
-    unsafe_allow_html=True,
-)
+apply_dashboard_css()
 
 
 def require_report_login() -> bool:

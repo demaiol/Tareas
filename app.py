@@ -26,6 +26,7 @@ from req_manager.email_ack import (
     send_resolution_notification,
 )
 from req_manager.email_ingest import EmailConfigError, sync_unseen_emails
+from req_manager.ui import apply_dashboard_css
 
 TZ = ZoneInfo("America/Santiago")
 load_dotenv()
@@ -35,48 +36,7 @@ st.set_page_config(
     page_icon="📨",
     layout="wide",
 )
-
-st.markdown(
-    """
-<style>
-.main {
-    background: radial-gradient(circle at 15% 15%, #edf4ff, #f9fbff 38%, #ffffff 80%);
-}
-.block-container {
-    padding-top: 1.5rem;
-    padding-bottom: 2.2rem;
-}
-h1, h2, h3 {
-    font-family: "Avenir Next", "Helvetica Neue", sans-serif;
-    color: #1f2d3d;
-}
-.kpi-card {
-    border-radius: 14px;
-    border: 1px solid #e4ebf5;
-    padding: 14px 16px;
-    background: white;
-    box-shadow: 0 7px 24px rgba(43, 83, 126, 0.08);
-}
-.kpi-label {
-    font-size: 0.9rem;
-    color: #5a6d84;
-}
-.kpi-value {
-    font-size: 1.6rem;
-    font-weight: 700;
-    color: #10253f;
-}
-.section-box {
-    border-radius: 14px;
-    border: 1px solid #e4ebf5;
-    padding: 16px;
-    background: white;
-    box-shadow: 0 7px 24px rgba(43, 83, 126, 0.08);
-}
-</style>
-""",
-    unsafe_allow_html=True,
-)
+apply_dashboard_css()
 
 
 def format_dt(value: str | None) -> str:

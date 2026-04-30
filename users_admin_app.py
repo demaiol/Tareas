@@ -21,6 +21,7 @@ from req_manager.db import (
     normalize_role,
     update_user,
 )
+from req_manager.ui import apply_dashboard_css
 
 TZ = ZoneInfo("America/Santiago")
 load_dotenv()
@@ -30,24 +31,7 @@ st.set_page_config(
     page_icon="👥",
     layout="wide",
 )
-
-st.markdown(
-    """
-<style>
-.main {
-    background: radial-gradient(circle at 15% 12%, #f2f7ff, #fbfdff 40%, #ffffff 82%);
-}
-.section-box {
-    border-radius: 12px;
-    border: 1px solid #dce8f5;
-    padding: 14px;
-    background: #ffffff;
-    box-shadow: 0 8px 20px rgba(31, 71, 112, 0.08);
-}
-</style>
-""",
-    unsafe_allow_html=True,
-)
+apply_dashboard_css()
 
 
 ROLE_OPTIONS = [ROLE_ADMIN, ROLE_REQUERIMIENTOS, ROLE_REPORTES]

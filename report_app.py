@@ -444,15 +444,6 @@ def render_debts_charts() -> None:
     c1, c2 = st.columns(2)
     with c1:
         st.caption("Deudas por estado")
-        amounts_summary_table(
-            [
-                ("Monto total deuda", total_amount),
-                ("Sin accion", amounts.get("Sin accion", 0.0)),
-                ("Plan acordado", amounts.get("Plan acordado", 0.0)),
-                ("Cobranza ejecutiva", amounts.get("Cobranza ejecutiva", 0.0)),
-                ("Proceso cerrado", amounts.get("Proceso cerrado", 0.0)),
-            ]
-        )
         pie_status = (
             alt.Chart(status_df)
             .mark_arc(innerRadius=65)
@@ -475,15 +466,17 @@ def render_debts_charts() -> None:
             .properties(height=280)
         )
         st.altair_chart(pie_status, use_container_width=True)
-    with c2:
-        st.caption("Deudores con/sin servicios cortados")
         amounts_summary_table(
             [
                 ("Monto total deuda", total_amount),
-                ("Servicios cortados", amount_yes),
-                ("Sin servicios cortados", amount_no),
+                ("Sin accion", amounts.get("Sin accion", 0.0)),
+                ("Plan acordado", amounts.get("Plan acordado", 0.0)),
+                ("Cobranza ejecutiva", amounts.get("Cobranza ejecutiva", 0.0)),
+                ("Proceso cerrado", amounts.get("Proceso cerrado", 0.0)),
             ]
         )
+    with c2:
+        st.caption("Deudores con/sin servicios cortados")
         pie_cut = (
             alt.Chart(cut_df)
             .mark_arc(innerRadius=65)
@@ -506,6 +499,13 @@ def render_debts_charts() -> None:
             .properties(height=280)
         )
         st.altair_chart(pie_cut, use_container_width=True)
+        amounts_summary_table(
+            [
+                ("Monto total deuda", total_amount),
+                ("Servicios cortados", amount_yes),
+                ("Sin servicios cortados", amount_no),
+            ]
+        )
 
 
 def main() -> None:

@@ -188,13 +188,6 @@ def render_services_cut_pie(rows: list[dict]) -> None:
     )
 
     st.subheader("Deudores por estado de servicios")
-    amounts_summary_table(
-        [
-            ("Monto total deuda", total_amount),
-            ("Servicios cortados", amount_yes),
-            ("Sin servicios cortados", amount_no),
-        ]
-    )
     pie = (
         alt.Chart(chart_df)
         .mark_arc(innerRadius=65)
@@ -217,6 +210,13 @@ def render_services_cut_pie(rows: list[dict]) -> None:
         .properties(height=280)
     )
     st.altair_chart(pie, use_container_width=True)
+    amounts_summary_table(
+        [
+            ("Monto total deuda", total_amount),
+            ("Servicios cortados", amount_yes),
+            ("Sin servicios cortados", amount_no),
+        ]
+    )
 
 
 def render_debt_status_chart(rows: list[dict]) -> None:
@@ -245,15 +245,6 @@ def render_debt_status_chart(rows: list[dict]) -> None:
     total_amount = sum(amounts.values())
 
     st.subheader("Estado actual de las deudas")
-    amounts_summary_table(
-        [
-            ("Monto total deuda", total_amount),
-            ("Sin accion", amounts.get("Sin accion", 0.0)),
-            ("Plan acordado", amounts.get("Plan acordado", 0.0)),
-            ("Cobranza ejecutiva", amounts.get("Cobranza ejecutiva", 0.0)),
-            ("Proceso cerrado", amounts.get("Proceso cerrado", 0.0)),
-        ]
-    )
     pie = (
         alt.Chart(status_df)
         .mark_arc(innerRadius=65)
@@ -275,6 +266,15 @@ def render_debt_status_chart(rows: list[dict]) -> None:
         .properties(height=280)
     )
     st.altair_chart(pie, use_container_width=True)
+    amounts_summary_table(
+        [
+            ("Monto total deuda", total_amount),
+            ("Sin accion", amounts.get("Sin accion", 0.0)),
+            ("Plan acordado", amounts.get("Plan acordado", 0.0)),
+            ("Cobranza ejecutiva", amounts.get("Cobranza ejecutiva", 0.0)),
+            ("Proceso cerrado", amounts.get("Proceso cerrado", 0.0)),
+        ]
+    )
 
 
 def create_debt_form() -> None:

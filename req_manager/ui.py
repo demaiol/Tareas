@@ -6,10 +6,14 @@ import streamlit as st
 
 
 STREAMLIT_COMPAT_CSS = """
-/* Streamlit compatibility layer for enterprise theme */
+/* Streamlit compatibility layer for score.css (LAD) */
+.stApp, .stApp * {
+  font-family: var(--lad-font, "Oracle Sans", "Helvetica Neue", Arial, sans-serif) !important;
+}
+
 .stApp {
-  background: var(--oracle-page-bg, #f7f7f6);
-  color: var(--oracle-text, #161513);
+  background: var(--lad-bg, #ffffff) !important;
+  color: var(--lad-text, #111111) !important;
 }
 
 .stApp .block-container {
@@ -19,82 +23,81 @@ STREAMLIT_COMPAT_CSS = """
 }
 
 .stApp h1, .stApp h2, .stApp h3 {
-  color: var(--oracle-black, #312d2a);
+  color: var(--lad-text, #111111) !important;
   letter-spacing: -0.01em;
+  font-weight: 800;
 }
 
 .stApp [data-testid="stMetric"] {
-  background: var(--oracle-card-bg, #fff);
-  border: 1px solid var(--oracle-border, #d6d2cd);
-  border-radius: 10px;
+  background: #ffffff !important;
+  border: 1px solid var(--lad-border-soft, #d9d9d9) !important;
+  border-radius: 3px !important;
   padding: 10px 12px;
 }
 
 .stApp .kpi-card,
 .stApp .section-box,
 .stApp .info-box {
-  background: var(--oracle-card-bg, #fff);
-  border: 1px solid var(--oracle-border, #d6d2cd);
-  border-radius: 10px;
-  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.08);
+  background: #ffffff !important;
+  border: 1px solid var(--lad-border-soft, #d9d9d9) !important;
+  border-radius: 3px !important;
+  box-shadow: var(--lad-shadow-card, 0 1px 3px rgba(0, 0, 0, .28));
 }
 
-.stApp .kpi-card {
-  padding: 12px 14px;
-}
-
-.stApp .kpi-label {
-  color: var(--oracle-muted, #6f6a64);
-  font-size: 0.85rem;
-}
-
-.stApp .kpi-value {
-  color: var(--oracle-black, #312d2a);
-  font-weight: 700;
-  font-size: 1.4rem;
-}
-
-.stApp .section-box {
-  padding: 14px;
-}
-
-.stApp .info-box {
-  padding: 10px 12px;
-}
+.stApp .kpi-card { padding: 12px 14px; }
+.stApp .kpi-label { color: var(--lad-muted, #5d6368) !important; font-size: .85rem; }
+.stApp .kpi-value { color: var(--lad-text, #111111) !important; font-weight: 800; font-size: 1.4rem; }
+.stApp .section-box { padding: 14px; }
+.stApp .info-box { padding: 10px 12px; }
 
 .stApp [data-testid="stDataFrame"] {
-  border: 1px solid var(--oracle-border, #d6d2cd);
-  border-radius: 10px;
+  border: 1px solid var(--lad-border-table, #d4d4d4) !important;
+  border-radius: 3px !important;
   overflow: hidden;
-  background: #fff;
+  background: #fff !important;
 }
 
-.stApp [data-testid="stDataFrame"] * {
-  font-family: var(--oracle-font, "Oracle Sans", Arial, sans-serif);
+.stApp [data-testid="stDataFrame"] thead tr th {
+  background: var(--lad-teal-header, #155f67) !important;
+  color: #fff !important;
+  border-color: #ffffff !important;
+}
+
+.stApp [data-testid="stDataFrame"] tbody tr:nth-child(even) td {
+  background: #fbfbfb !important;
 }
 
 .stApp .stButton > button,
 .stApp .stFormSubmitButton > button {
-  border-radius: 8px;
-  border: 1px solid var(--oracle-border-dark, #b9b3ad);
-  background: var(--oracle-purple, #3b263f);
-  color: #fff;
-  font-weight: 600;
+  min-height: 2.2rem;
+  border-radius: 3px !important;
+  border: 1px solid var(--lad-control-border, #a8a8a8) !important;
+  background: var(--lad-teal, #1f6671) !important;
+  color: #fff !important;
+  font-weight: 700;
 }
 
 .stApp .stButton > button:hover,
 .stApp .stFormSubmitButton > button:hover {
-  background: var(--oracle-purple-dark, #2f1e33);
-  border-color: var(--oracle-purple-dark, #2f1e33);
+  background: var(--lad-teal-dark, #15555f) !important;
+  border-color: var(--lad-teal-dark, #15555f) !important;
+}
+
+.stApp [data-baseweb="input"] > div,
+.stApp [data-baseweb="select"] > div,
+.stApp textarea {
+  border-radius: 3px !important;
+  border-color: var(--lad-control-border, #a8a8a8) !important;
 }
 
 .stApp [data-testid="stSidebar"] {
-  background: var(--oracle-card-bg, #fff);
-  border-right: 1px solid var(--oracle-border, #d6d2cd);
+  background: #fff !important;
+  border-right: 1px solid var(--lad-border-soft, #d9d9d9) !important;
 }
 
-.stApp input, .stApp textarea, .stApp select {
-  border-radius: 8px !important;
+.stApp .stTabs [role="tab"][aria-selected="true"] {
+  color: var(--lad-teal, #1f6671) !important;
+  border-bottom-color: var(--lad-teal, #1f6671) !important;
 }
 """
 

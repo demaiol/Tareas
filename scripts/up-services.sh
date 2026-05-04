@@ -11,6 +11,8 @@ REPORT_LOG="$LOCAL_DIR/report-8502.log"
 REPORT_PID_FILE="$LOCAL_DIR/report-8502.pid"
 USERS_LOG="$LOCAL_DIR/users-8503.log"
 USERS_PID_FILE="$LOCAL_DIR/users-8503.pid"
+DEBTS_LOG="$LOCAL_DIR/debts-8504.log"
+DEBTS_PID_FILE="$LOCAL_DIR/debts-8504.pid"
 
 mkdir -p "$LOCAL_DIR"
 
@@ -35,8 +37,10 @@ start_service() {
 start_service 8501 "$BASE_DIR/app.py" "$APP_LOG" "$APP_PID_FILE"
 start_service 8502 "$BASE_DIR/report_app.py" "$REPORT_LOG" "$REPORT_PID_FILE"
 start_service 8503 "$BASE_DIR/users_admin_app.py" "$USERS_LOG" "$USERS_PID_FILE"
+start_service 8504 "$BASE_DIR/debts_app.py" "$DEBTS_LOG" "$DEBTS_PID_FILE"
 
 echo "Done. URLs:"
 echo "- Gestion: http://localhost:8501"
 echo "- Reporte: http://localhost:8502"
 echo "- Usuarios: http://localhost:8503"
+echo "- Deudas: http://localhost:8504"

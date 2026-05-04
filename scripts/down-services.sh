@@ -30,9 +30,11 @@ stop_by_port() {
 stop_by_pid_file "$LOCAL_DIR/app-8501.pid"
 stop_by_pid_file "$LOCAL_DIR/report-8502.pid"
 stop_by_pid_file "$LOCAL_DIR/users-8503.pid"
+stop_by_pid_file "$LOCAL_DIR/debts-8504.pid"
 
 stop_by_port 8501
 stop_by_port 8502
 stop_by_port 8503
+stop_by_port 8504
 
 echo "Done. Services are down."

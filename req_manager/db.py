@@ -13,6 +13,12 @@ ROLE_ADMIN = "Admin"
 ROLE_REQUERIMIENTOS = "Requeriemientos"
 ROLE_REPORTES = "Reportes"
 VALID_ROLES = {ROLE_ADMIN, ROLE_REQUERIMIENTOS, ROLE_REPORTES}
+DEBT_STATUS_OPTIONS = [
+    "Sin accion",
+    "Plan acordado",
+    "Cobranza ejecutiva",
+    "Proceso cerrado",
+]
 DEFAULT_USERS = [
     ("Administrador", "DEMO123$", ROLE_ADMIN),
     ("gestion", "gestion123$", ROLE_REPORTES),
@@ -46,6 +52,14 @@ def normalize_role(value: str | None) -> str:
     if role_l in {"requerimientos", "requeriemientos"}:
         return ROLE_REQUERIMIENTOS
     return role
+
+
+def normalize_debt_status(value: str | None) -> str:
+    status = (value or "").strip()
+    for option in DEBT_STATUS_OPTIONS:
+        if status.lower() == option.lower():
+            return option
+    return DEBT_STATUS_OPTIONS[0]
 
 
 def _is_postgres() -> bool:
@@ -274,6 +288,20 @@ def ensure_schema() -> None:
                     )
                     """
                 )
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS community_debts (
+                        id BIGSERIAL PRIMARY KEY,
+                        apartment_number TEXT NOT NULL,
+                        debt_amount NUMERIC(14, 2) NOT NULL,
+                        status TEXT NOT NULL,
+                        services_cut BOOLEAN NOT NULL DEFAULT FALSE,
+                        last_contact TEXT,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
                 # Alineamos secuencias para evitar colisiones de PK al insertar.
                 cur.execute(
                     """
@@ -323,6 +351,16 @@ def ensure_schema() -> None:
                         TRUE
                     )
                     FROM requirements_deleted_backup
+                    """
+                )
+                cur.execute(
+                    """
+                    SELECT setval(
+                        pg_get_serial_sequence('community_debts', 'id'),
+                        COALESCE(MAX(id), 1),
+                        TRUE
+                    )
+                    FROM community_debts
                     """
                 )
                 for username, password, role in DEFAULT_USERS:
@@ -590,6 +628,138 @@ def list_requirements(status: str | None = None) -> list[dict[str, Any]]:
                 """
             ).fetchall()
         return _to_dict_list(rows)
+
+
+def list_community_debts() -> list[dict[str, Any]]:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    apartment_number,
+                    debt_amount,
+                    status,
+                    services_cut,
+                    last_contact,
+                    created_at,
+                    updated_at
+                FROM community_debts
+                ORDER BY updated_at DESC, id DESC
+                """
+            )
+            rows = cur.fetchall()
+        return _to_dict_list(rows)
+
+
+def create_community_debt(
+    apartment_number: str,
+    debt_amount: float,
+    status: str,
+    services_cut: bool,
+    last_contact: str,
+    actor: str = "Admin",
+) -> int | None:
+    apt = (apartment_number or "").strip()
+    status_v = normalize_debt_status(status)
+    if not apt:
+        return None
+    if debt_amount < 0:
+        return None
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO community_debts (
+                    apartment_number,
+                    debt_amount,
+                    status,
+                    services_cut,
+                    last_contact,
+                    created_at,
+                    updated_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+                """,
+                (
+                    apt,
+                    round(float(debt_amount), 2),
+                    status_v,
+                    bool(services_cut),
+                    (last_contact or "").strip(),
+                    datetime.now(TZ),
+                    datetime.now(TZ),
+                ),
+            )
+            row = cur.fetchone()
+        conn.commit()
+
+    if row is None:
+        return None
+
+    debt_id = int(row["id"])
+    register_audit_log(
+        actor=actor,
+        action="Crear deuda",
+        entity_type="Deuda",
+        entity_id=str(debt_id),
+        detail=f"Dpto: {apt} | Estado: {status_v}",
+    )
+    return debt_id
+
+
+def update_community_debt(
+    debt_id: int,
+    apartment_number: str,
+    debt_amount: float,
+    status: str,
+    services_cut: bool,
+    last_contact: str,
+    actor: str = "Admin",
+) -> bool:
+    apt = (apartment_number or "").strip()
+    status_v = normalize_debt_status(status)
+    if not apt:
+        return False
+    if debt_amount < 0:
+        return False
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE community_debts
+                SET apartment_number = %s,
+                    debt_amount = %s,
+                    status = %s,
+                    services_cut = %s,
+                    last_contact = %s,
+                    updated_at = %s
+                WHERE id = %s
+                """,
+                (
+                    apt,
+                    round(float(debt_amount), 2),
+                    status_v,
+                    bool(services_cut),
+                    (last_contact or "").strip(),
+                    datetime.now(TZ),
+                    int(debt_id),
+                ),
+            )
+            updated = cur.rowcount > 0
+        conn.commit()
+
+    if updated:
+        register_audit_log(
+            actor=actor,
+            action="Actualizar deuda",
+            entity_type="Deuda",
+            entity_id=str(debt_id),
+            detail=f"Dpto: {apt} | Estado: {status_v}",
+        )
+    return updated
 
 
 def get_requirement(req_code: str) -> dict[str, Any] | None:

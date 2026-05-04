@@ -137,9 +137,28 @@ Permite:
 - Crear usuarios (rol `Admin`, `Requeriemientos` o `Reportes`)
 - Editar rol, estado activo y contraseña
 
+## Módulo de Deudas de Gastos Comunes
+
+Puedes ejecutar un cuarto módulo para gestión de deudas:
+
+```bash
+streamlit run debts_app.py --server.port 8504
+```
+
+URL local de deudas: `http://localhost:8504`
+
+Permite:
+
+- Registrar número de dpto
+- Registrar monto de deuda
+- Registrar estado (`Sin accion`, `Plan acordado`, `Cobranza ejecutiva`, `Proceso cerrado`)
+- Marcar si tiene servicios cortados o no
+- Registrar último contacto (o intento) con el deudor
+- Editar registros existentes
+
 ## Scripts de operación
 
-Subir servicios (gestión + reporte + usuarios):
+Subir servicios (gestión + reporte + usuarios + deudas):
 
 ```bash
 ./scripts/up-services.sh

@@ -47,8 +47,7 @@ Para no perder datos entre despliegues/reinicios en Streamlit Cloud, usa base ex
 DATABASE_URL=postgresql://usuario:password@host:5432/base
 ```
 
-Cuando `DATABASE_URL` existe, la app usa PostgreSQL automáticamente.
-Si no existe, usa `req_manager.db` local (SQLite).
+`DATABASE_URL` es obligatoria y la app opera sobre PostgreSQL.
 
 ## Configurar Gmail
 
@@ -91,6 +90,7 @@ DATABASE_URL = "postgresql://usuario:password@host:5432/base"
 GMAIL_USER = "requerimientosvistamar@gmail.com"
 GMAIL_APP_PASSWORD = "TU_APP_PASSWORD_16"
 GMAIL_FOLDER = "INBOX"
+DEBTS_APP_URL = "https://TU-APP-DEUDAS.streamlit.app"
 ```
 
 5. Guarda y reinicia la app.
@@ -146,6 +146,12 @@ streamlit run debts_app.py --server.port 8504
 ```
 
 URL local de deudas: `http://localhost:8504`
+
+Si usas acceso desde Requerimientos con sesión compartida, define:
+
+```env
+DEBTS_APP_URL=https://TU-APP-DEUDAS.streamlit.app
+```
 
 Permite:
 

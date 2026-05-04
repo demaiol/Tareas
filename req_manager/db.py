@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -302,6 +303,20 @@ def ensure_schema() -> None:
                     )
                     """
                 )
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS app_session_tokens (
+                        id BIGSERIAL PRIMARY KEY,
+                        token TEXT UNIQUE NOT NULL,
+                        username TEXT NOT NULL,
+                        role TEXT NOT NULL,
+                        target_module TEXT NOT NULL,
+                        expires_at TIMESTAMPTZ NOT NULL,
+                        consumed_at TIMESTAMPTZ,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
                 # Alineamos secuencias para evitar colisiones de PK al insertar.
                 cur.execute(
                     """
@@ -361,6 +376,16 @@ def ensure_schema() -> None:
                         TRUE
                     )
                     FROM community_debts
+                    """
+                )
+                cur.execute(
+                    """
+                    SELECT setval(
+                        pg_get_serial_sequence('app_session_tokens', 'id'),
+                        COALESCE(MAX(id), 1),
+                        TRUE
+                    )
+                    FROM app_session_tokens
                     """
                 )
                 for username, password, role in DEFAULT_USERS:
@@ -1173,6 +1198,110 @@ def authenticate_user(
                     (username, password),
                 )
             return cur.fetchone() is not None
+
+
+def get_user_role(username: str) -> str | None:
+    user = (username or "").strip()
+    if not user:
+        return None
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT role
+                FROM users
+                WHERE username = %s
+                  AND active = TRUE
+                LIMIT 1
+                """,
+                (user,),
+            )
+            row = cur.fetchone()
+    if not row:
+        return None
+    return normalize_role(row["role"])
+
+
+def create_app_session_token(
+    username: str,
+    target_module: str,
+    ttl_minutes: int = 5,
+) -> str | None:
+    user = (username or "").strip()
+    target = (target_module or "").strip().lower()
+    if not user or not target:
+        return None
+
+    role = get_user_role(user)
+    if role is None:
+        return None
+
+    safe_ttl = max(1, min(int(ttl_minutes), 30))
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(TZ) + timedelta(minutes=safe_ttl)
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO app_session_tokens (
+                    token, username, role, target_module, expires_at, created_at
+                ) VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (token, user, role, target, expires_at, datetime.now(TZ)),
+            )
+        conn.commit()
+    return token
+
+
+def consume_app_session_token(
+    token: str,
+    target_module: str,
+) -> dict[str, Any] | None:
+    token_v = (token or "").strip()
+    target = (target_module or "").strip().lower()
+    if not token_v or not target:
+        return None
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT token, username, role, target_module, expires_at, consumed_at
+                FROM app_session_tokens
+                WHERE token = %s
+                LIMIT 1
+                """,
+                (token_v,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+
+            expires_at = row["expires_at"]
+            if (
+                row["target_module"] != target
+                or row["consumed_at"] is not None
+                or expires_at is None
+                or expires_at < datetime.now(TZ)
+            ):
+                return None
+
+            cur.execute(
+                """
+                UPDATE app_session_tokens
+                SET consumed_at = %s
+                WHERE token = %s
+                """,
+                (datetime.now(TZ), token_v),
+            )
+        conn.commit()
+
+    return {
+        "username": row["username"],
+        "role": normalize_role(row["role"]),
+    }
 
 
 def register_admin_login(username: str, ip_address: str) -> None:

@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 from req_manager.db import (
     authenticate_user,
+    create_app_session_token,
     create_requirement,
     ensure_schema,
     get_metrics,
@@ -116,6 +117,27 @@ def _detect_client_ip() -> str:
     except Exception:  # noqa: BLE001
         return "No disponible"
     return "No disponible"
+
+
+def debts_app_url() -> str:
+    return (os.getenv("DEBTS_APP_URL", "").strip() or "http://localhost:8504").rstrip("/")
+
+
+def render_debts_shortcut() -> None:
+    st.subheader("Acceso rápido")
+    st.caption("Abrir el módulo de deudas con sesión compartida (token temporal).")
+    if st.button("Ir al módulo de deudas", use_container_width=False):
+        username = st.session_state.get("admin_username", "")
+        token = create_app_session_token(
+            username=username,
+            target_module="debts",
+            ttl_minutes=5,
+        )
+        if not token:
+            st.error("No se pudo generar acceso temporal para el módulo de deudas.")
+            return
+        url = f"{debts_app_url()}?sso_token={token}"
+        st.link_button("Abrir Deudas", url=url, use_container_width=False)
 
 
 def sync_emails_ui() -> None:
@@ -254,6 +276,7 @@ def main() -> None:
     st.caption(
         f"Control de solicitudes por correo | Fecha actual: {datetime.now(TZ).strftime('%d-%m-%Y %H:%M')}"
     )
+    render_debts_shortcut()
     sync_emails_ui()
 
     render_metrics()

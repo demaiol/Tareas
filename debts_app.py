@@ -11,7 +11,9 @@ from dotenv import load_dotenv
 from req_manager.db import (
     DEBT_STATUS_OPTIONS,
     ROLE_ADMIN,
+    ROLE_REQUERIMIENTOS,
     authenticate_user,
+    consume_app_session_token,
     create_community_debt,
     ensure_schema,
     list_community_debts,
@@ -57,11 +59,20 @@ def apartment_sort_key(value: str | None) -> tuple[int, int | str]:
 
 
 def require_admin_login() -> bool:
+    token = st.query_params.get("sso_token")
+    if token and not st.session_state.get("debts_admin_authenticated", False):
+        sso_data = consume_app_session_token(str(token), target_module="debts")
+        if sso_data and sso_data.get("role") in {ROLE_ADMIN, ROLE_REQUERIMIENTOS}:
+            st.session_state["debts_admin_authenticated"] = True
+            st.session_state["debts_actor"] = str(sso_data.get("username") or "Admin")
+            st.query_params.clear()
+            st.rerun()
+
     if st.session_state.get("debts_admin_authenticated", False):
         return True
 
     st.title("Acceso Gestión de Deudas")
-    st.caption("Acceso restringido a usuarios con rol Admin.")
+    st.caption("Acceso restringido a usuarios con rol Requeriemientos o Admin.")
 
     with st.form("debts_admin_login_form", clear_on_submit=False):
         username = st.text_input("Usuario")
@@ -69,7 +80,11 @@ def require_admin_login() -> bool:
         submitted = st.form_submit_button("Ingresar", use_container_width=True)
 
     if submitted:
-        if authenticate_user(username, password, role=ROLE_ADMIN):
+        if authenticate_user(
+            username,
+            password,
+            role=[ROLE_REQUERIMIENTOS, ROLE_ADMIN],
+        ):
             st.session_state["debts_admin_authenticated"] = True
             st.session_state["debts_actor"] = username.strip() or "Admin"
             st.success("Autenticación correcta.")

@@ -17,7 +17,7 @@ STREAMLIT_COMPAT_CSS = """
 }
 
 .stApp .block-container {
-  max-width: 1320px;
+  max-width: min(1960px, 98vw);
   padding-top: 1.2rem;
   padding-bottom: 2rem;
 }

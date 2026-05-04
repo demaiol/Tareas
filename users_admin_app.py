@@ -19,6 +19,7 @@ from req_manager.db import (
     list_requirements,
     list_users,
     normalize_role,
+    register_login_event,
     update_user,
 )
 from req_manager.ui import apply_dashboard_css
@@ -62,6 +63,11 @@ def require_admin_login() -> bool:
 
     if submitted:
         if authenticate_user(username, password, role=ROLE_ADMIN):
+            register_login_event(
+                username=username,
+                ip_address=_detect_client_ip(),
+                module="Admin Tool",
+            )
             st.session_state["users_admin_authenticated"] = True
             st.session_state["users_admin_username"] = username.strip()
             st.success("Autenticación correcta.")
@@ -70,6 +76,27 @@ def require_admin_login() -> bool:
             st.error("Usuario o contraseña inválidos o sin permisos de administrador.")
 
     return False
+
+
+def _detect_client_ip() -> str:
+    try:
+        context = st.context
+        if context is None:
+            return "No disponible"
+        ip_direct = getattr(context, "ip_address", None)
+        if ip_direct:
+            return str(ip_direct)
+        headers = getattr(context, "headers", None)
+        if headers:
+            xff = headers.get("X-Forwarded-For") or headers.get("x-forwarded-for")
+            if xff:
+                return str(xff).split(",")[0].strip()
+            real_ip = headers.get("X-Real-Ip") or headers.get("x-real-ip")
+            if real_ip:
+                return str(real_ip).strip()
+    except Exception:  # noqa: BLE001
+        return "No disponible"
+    return "No disponible"
 
 
 def users_table(users: list[dict]) -> pd.DataFrame:

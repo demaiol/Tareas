@@ -249,8 +249,15 @@ def ensure_schema() -> None:
                         id BIGSERIAL PRIMARY KEY,
                         username TEXT NOT NULL,
                         ip_address TEXT NOT NULL,
+                        module TEXT NOT NULL DEFAULT 'Administrador',
                         logged_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                     )
+                    """
+                )
+                cur.execute(
+                    """
+                    ALTER TABLE admin_login_events
+                    ADD COLUMN IF NOT EXISTS module TEXT NOT NULL DEFAULT 'Administrador'
                     """
                 )
                 cur.execute(
@@ -444,6 +451,7 @@ def ensure_schema() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT NOT NULL,
                 ip_address TEXT NOT NULL,
+                module TEXT NOT NULL DEFAULT 'Administrador',
                 logged_at TEXT NOT NULL
             )
             """
@@ -1304,9 +1312,14 @@ def consume_app_session_token(
     }
 
 
-def register_admin_login(username: str, ip_address: str) -> None:
+def register_login_event(
+    username: str,
+    ip_address: str,
+    module: str = "Administrador",
+) -> None:
     username = username.strip()
     ip = (ip_address or "").strip() or "No disponible"
+    module_v = (module or "").strip() or "Administrador"
     if not username:
         return
 
@@ -1315,22 +1328,26 @@ def register_admin_login(username: str, ip_address: str) -> None:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO admin_login_events (username, ip_address, logged_at)
-                    VALUES (%s, %s, %s)
+                    INSERT INTO admin_login_events (username, ip_address, module, logged_at)
+                    VALUES (%s, %s, %s, %s)
                     """,
-                    (username, ip, datetime.now(TZ)),
+                    (username, ip, module_v, datetime.now(TZ)),
                 )
             conn.commit()
             return
 
         conn.execute(
             """
-            INSERT INTO admin_login_events (username, ip_address, logged_at)
-            VALUES (?, ?, ?)
+            INSERT INTO admin_login_events (username, ip_address, module, logged_at)
+            VALUES (?, ?, ?, ?)
             """,
-            (username, ip, now_iso()),
+            (username, ip, module_v, now_iso()),
         )
         conn.commit()
+
+
+def register_admin_login(username: str, ip_address: str) -> None:
+    register_login_event(username=username, ip_address=ip_address, module="Administrador")
 
 
 def list_admin_logins(limit: int = 50) -> list[dict[str, Any]]:
@@ -1340,7 +1357,7 @@ def list_admin_logins(limit: int = 50) -> list[dict[str, Any]]:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT username, ip_address, logged_at
+                    SELECT username, ip_address, module, logged_at
                     FROM admin_login_events
                     ORDER BY logged_at DESC
                     LIMIT %s
@@ -1352,7 +1369,7 @@ def list_admin_logins(limit: int = 50) -> list[dict[str, Any]]:
 
         rows = conn.execute(
             """
-            SELECT username, ip_address, logged_at
+            SELECT username, ip_address, module, logged_at
             FROM admin_login_events
             ORDER BY datetime(logged_at) DESC
             LIMIT ?

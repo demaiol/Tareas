@@ -9,11 +9,15 @@ from dotenv import load_dotenv
 from zoneinfo import ZoneInfo
 
 from req_manager.db import (
+    DEBT_STATUS_OPTIONS,
     authenticate_user,
     ensure_schema,
     get_metrics,
+    list_community_debts,
     list_admin_logins,
     list_requirements,
+    normalize_debt_status,
+    register_login_event,
     ROLE_ADMIN,
     ROLE_REPORTES,
 )
@@ -23,7 +27,7 @@ TZ = ZoneInfo("America/Santiago")
 load_dotenv()
 
 st.set_page_config(
-    page_title="Reporte Ejecutivo de Requerimientos",
+    page_title="Reporte Ejecutivo",
     page_icon="📊",
     layout="wide",
 )
@@ -48,6 +52,7 @@ def require_report_login() -> bool:
             password,
             role=[ROLE_REPORTES, ROLE_ADMIN],
         ):
+            register_login_event(username=username, ip_address=_detect_client_ip(), module="Reportes")
             st.session_state["report_authenticated"] = True
             st.success("Autenticación correcta.")
             st.rerun()
@@ -306,6 +311,27 @@ def render_requirement_resolution(rows: list, req_code: str | None) -> None:
     )
 
 
+def _detect_client_ip() -> str:
+    try:
+        context = st.context
+        if context is None:
+            return "No disponible"
+        ip_direct = getattr(context, "ip_address", None)
+        if ip_direct:
+            return str(ip_direct)
+        headers = getattr(context, "headers", None)
+        if headers:
+            xff = headers.get("X-Forwarded-For") or headers.get("x-forwarded-for")
+            if xff:
+                return str(xff).split(",")[0].strip()
+            real_ip = headers.get("X-Real-Ip") or headers.get("x-real-ip")
+            if real_ip:
+                return str(real_ip).strip()
+    except Exception:  # noqa: BLE001
+        return "No disponible"
+    return "No disponible"
+
+
 def render_admin_logins() -> None:
     st.subheader("Últimos logins en Administrador")
     logs = list_admin_logins(limit=50)
@@ -317,6 +343,7 @@ def render_admin_logins() -> None:
         [
             {
                 "Usuario": r.get("username", "-"),
+                "Módulo": r.get("module", "Administrador"),
                 "IP": r.get("ip_address", "No disponible"),
                 "Día y Hora": format_dt(r.get("logged_at")),
             }
@@ -324,6 +351,78 @@ def render_admin_logins() -> None:
         ]
     )
     st.dataframe(df, use_container_width=True, hide_index=True)
+
+
+def render_debts_charts() -> None:
+    rows = list_community_debts()
+    if not rows:
+        st.subheader("Estado de deudas")
+        st.caption("No hay deudas registradas.")
+        return
+
+    counts = {status: 0 for status in DEBT_STATUS_OPTIONS}
+    cut_yes = 0
+    cut_no = 0
+    for r in rows:
+        status = normalize_debt_status(r.get("status"))
+        counts[status] = counts.get(status, 0) + 1
+        if bool(r.get("services_cut")):
+            cut_yes += 1
+        else:
+            cut_no += 1
+
+    status_df = pd.DataFrame(
+        [{"Grupo": s, "Cantidad": counts.get(s, 0)} for s in DEBT_STATUS_OPTIONS]
+    )
+    cut_df = pd.DataFrame(
+        [
+            {"Grupo": "Servicios cortados", "Cantidad": cut_yes},
+            {"Grupo": "Sin servicios cortados", "Cantidad": cut_no},
+        ]
+    )
+
+    st.subheader("Estado de deudas de gastos comunes")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.caption("Deudas por estado")
+        pie_status = (
+            alt.Chart(status_df)
+            .mark_arc(innerRadius=65)
+            .encode(
+                theta=alt.Theta(field="Cantidad", type="quantitative"),
+                color=alt.Color(
+                    field="Grupo",
+                    type="nominal",
+                    scale=alt.Scale(
+                        domain=DEBT_STATUS_OPTIONS,
+                        range=["#6b7280", "#2f83a3", "#d64545", "#2c9f7a"],
+                    ),
+                ),
+                tooltip=["Grupo", "Cantidad"],
+            )
+            .properties(height=280)
+        )
+        st.altair_chart(pie_status, use_container_width=True)
+    with c2:
+        st.caption("Deudores con/sin servicios cortados")
+        pie_cut = (
+            alt.Chart(cut_df)
+            .mark_arc(innerRadius=65)
+            .encode(
+                theta=alt.Theta(field="Cantidad", type="quantitative"),
+                color=alt.Color(
+                    field="Grupo",
+                    type="nominal",
+                    scale=alt.Scale(
+                        domain=["Servicios cortados", "Sin servicios cortados"],
+                        range=["#d64545", "#2c9f7a"],
+                    ),
+                ),
+                tooltip=["Grupo", "Cantidad"],
+            )
+            .properties(height=280)
+        )
+        st.altair_chart(pie_cut, use_container_width=True)
 
 
 def main() -> None:
@@ -335,7 +434,7 @@ def main() -> None:
     rows = list_requirements("Todos")
     metrics = get_metrics()
 
-    st.title("Reporte Ejecutivo de Requerimientos")
+    st.title("Reporte Ejecutivo")
     st.caption(
         f"Vista de monitoreo sin edición | {datetime.now(TZ).strftime('%d-%m-%Y %H:%M')}"
     )
@@ -349,6 +448,8 @@ def main() -> None:
     render_kpis(metrics)
     st.write("")
     render_charts(metrics, rows)
+    st.write("")
+    render_debts_charts()
     st.write("")
     selected_req = render_read_only_table(rows)
     st.write("")

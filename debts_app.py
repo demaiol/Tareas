@@ -18,6 +18,7 @@ from req_manager.db import (
     ensure_schema,
     list_community_debts,
     normalize_debt_status,
+    register_login_event,
     update_community_debt,
 )
 from req_manager.ui import apply_dashboard_css
@@ -63,8 +64,14 @@ def require_admin_login() -> bool:
     if token and not st.session_state.get("debts_admin_authenticated", False):
         sso_data = consume_app_session_token(str(token), target_module="debts")
         if sso_data and sso_data.get("role") in {ROLE_ADMIN, ROLE_REQUERIMIENTOS}:
+            username = str(sso_data.get("username") or "Admin")
+            register_login_event(
+                username=username,
+                ip_address=_detect_client_ip(),
+                module="Deudas",
+            )
             st.session_state["debts_admin_authenticated"] = True
-            st.session_state["debts_actor"] = str(sso_data.get("username") or "Admin")
+            st.session_state["debts_actor"] = username
             st.query_params.clear()
             st.rerun()
 
@@ -85,6 +92,11 @@ def require_admin_login() -> bool:
             password,
             role=[ROLE_REQUERIMIENTOS, ROLE_ADMIN],
         ):
+            register_login_event(
+                username=username,
+                ip_address=_detect_client_ip(),
+                module="Deudas",
+            )
             st.session_state["debts_admin_authenticated"] = True
             st.session_state["debts_actor"] = username.strip() or "Admin"
             st.success("Autenticación correcta.")
@@ -93,6 +105,27 @@ def require_admin_login() -> bool:
             st.error("Usuario o contraseña inválidos o sin permisos.")
 
     return False
+
+
+def _detect_client_ip() -> str:
+    try:
+        context = st.context
+        if context is None:
+            return "No disponible"
+        ip_direct = getattr(context, "ip_address", None)
+        if ip_direct:
+            return str(ip_direct)
+        headers = getattr(context, "headers", None)
+        if headers:
+            xff = headers.get("X-Forwarded-For") or headers.get("x-forwarded-for")
+            if xff:
+                return str(xff).split(",")[0].strip()
+            real_ip = headers.get("X-Real-Ip") or headers.get("x-real-ip")
+            if real_ip:
+                return str(real_ip).strip()
+    except Exception:  # noqa: BLE001
+        return "No disponible"
+    return "No disponible"
 
 
 def debts_table(rows: list[dict]) -> pd.DataFrame:

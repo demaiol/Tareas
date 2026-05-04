@@ -48,6 +48,13 @@ def format_amount(value: float | int | str | None) -> str:
         return "$0"
 
 
+def parse_amount(value: float | int | str | None) -> float:
+    try:
+        return float(value or 0)
+    except Exception:  # noqa: BLE001
+        return 0.0
+
+
 def apartment_sort_key(value: str | None) -> tuple[int, int | str]:
     v = str(value or "").strip()
     if v.isdigit():
@@ -153,14 +160,33 @@ def debts_table(rows: list[dict]) -> pd.DataFrame:
 def render_services_cut_pie(rows: list[dict]) -> None:
     cut_yes = sum(1 for r in rows if bool(r.get("services_cut")))
     cut_no = sum(1 for r in rows if not bool(r.get("services_cut")))
+    amount_yes = sum(parse_amount(r.get("debt_amount")) for r in rows if bool(r.get("services_cut")))
+    amount_no = sum(parse_amount(r.get("debt_amount")) for r in rows if not bool(r.get("services_cut")))
+    total_amount = amount_yes + amount_no
     chart_df = pd.DataFrame(
         [
-            {"Grupo": "Servicios cortados", "Cantidad": cut_yes},
-            {"Grupo": "Sin servicios cortados", "Cantidad": cut_no},
+            {
+                "Grupo": "Servicios cortados",
+                "Cantidad": cut_yes,
+                "Monto": amount_yes,
+                "MontoFmt": format_amount(amount_yes),
+            },
+            {
+                "Grupo": "Sin servicios cortados",
+                "Cantidad": cut_no,
+                "Monto": amount_no,
+                "MontoFmt": format_amount(amount_no),
+            },
         ]
     )
 
     st.subheader("Deudores por estado de servicios")
+    st.caption(
+        "Monto total deuda: "
+        f"{format_amount(total_amount)} | "
+        f"Servicios cortados: {format_amount(amount_yes)} | "
+        f"Sin servicios cortados: {format_amount(amount_no)}"
+    )
     pie = (
         alt.Chart(chart_df)
         .mark_arc(innerRadius=65)
@@ -174,7 +200,11 @@ def render_services_cut_pie(rows: list[dict]) -> None:
                     range=["#d64545", "#2c9f7a"],
                 ),
             ),
-            tooltip=["Grupo", "Cantidad"],
+            tooltip=[
+                alt.Tooltip("Grupo:N"),
+                alt.Tooltip("Cantidad:Q"),
+                alt.Tooltip("MontoFmt:N", title="Monto"),
+            ],
         )
         .properties(height=280)
     )
@@ -183,6 +213,7 @@ def render_services_cut_pie(rows: list[dict]) -> None:
 
 def render_debt_status_chart(rows: list[dict]) -> None:
     counts = {status: 0 for status in DEBT_STATUS_OPTIONS}
+    amounts = {status: 0.0 for status in DEBT_STATUS_OPTIONS}
     normalize_status = getattr(db, "normalize_debt_status", None)
     for r in rows:
         if callable(normalize_status):
@@ -190,12 +221,30 @@ def render_debt_status_chart(rows: list[dict]) -> None:
         else:
             status = str(r.get("status") or DEBT_STATUS_OPTIONS[0])
         counts[status] = counts.get(status, 0) + 1
+        amounts[status] = amounts.get(status, 0.0) + parse_amount(r.get("debt_amount"))
 
     status_df = pd.DataFrame(
-        [{"Estado": status, "Cantidad": counts.get(status, 0)} for status in DEBT_STATUS_OPTIONS]
+        [
+            {
+                "Estado": status,
+                "Cantidad": counts.get(status, 0),
+                "Monto": amounts.get(status, 0.0),
+                "MontoFmt": format_amount(amounts.get(status, 0.0)),
+            }
+            for status in DEBT_STATUS_OPTIONS
+        ]
     )
+    total_amount = sum(amounts.values())
 
     st.subheader("Estado actual de las deudas")
+    st.caption(
+        "Monto total deuda: "
+        f"{format_amount(total_amount)} | "
+        + " | ".join(
+            f"{status}: {format_amount(amounts.get(status, 0.0))}"
+            for status in DEBT_STATUS_OPTIONS
+        )
+    )
     pie = (
         alt.Chart(status_df)
         .mark_arc(innerRadius=65)
@@ -208,7 +257,11 @@ def render_debt_status_chart(rows: list[dict]) -> None:
                     range=["#6b7280", "#2f83a3", "#d64545", "#2c9f7a"],
                 ),
             ),
-            tooltip=["Estado", "Cantidad"],
+            tooltip=[
+                alt.Tooltip("Estado:N"),
+                alt.Tooltip("Cantidad:Q"),
+                alt.Tooltip("MontoFmt:N", title="Monto"),
+            ],
         )
         .properties(height=280)
     )

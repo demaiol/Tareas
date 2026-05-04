@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 from dotenv import load_dotenv
 
 from req_manager.db import (
@@ -137,7 +138,14 @@ def render_debts_shortcut() -> None:
             st.error("No se pudo generar acceso temporal para el módulo de deudas.")
             return
         url = f"{debts_app_url()}?sso_token={token}"
-        st.link_button("Abrir Deudas", url=url, use_container_width=False)
+        components.html(
+            f"""
+            <script>
+              window.location.href = "{url}";
+            </script>
+            """,
+            height=0,
+        )
 
 
 def sync_emails_ui() -> None:

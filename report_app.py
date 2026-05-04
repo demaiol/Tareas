@@ -115,6 +115,13 @@ def parse_amount(value: float | int | str | None) -> float:
         return 0.0
 
 
+def amounts_summary_table(items: list[tuple[str, float]]) -> None:
+    df = pd.DataFrame(
+        [{"Concepto": label, "Monto": format_amount(amount)} for label, amount in items]
+    )
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+
 def to_dt(value: str | datetime | None) -> datetime | None:
     if not value:
         return None
@@ -437,13 +444,14 @@ def render_debts_charts() -> None:
     c1, c2 = st.columns(2)
     with c1:
         st.caption("Deudas por estado")
-        st.caption(
-            "Monto total deuda: "
-            f"{format_amount(total_amount)} | "
-            + " | ".join(
-                f"{status}: {format_amount(amounts.get(status, 0.0))}"
-                for status in DEBT_STATUS_OPTIONS
-            )
+        amounts_summary_table(
+            [
+                ("Monto total deuda", total_amount),
+                ("Sin accion", amounts.get("Sin accion", 0.0)),
+                ("Plan acordado", amounts.get("Plan acordado", 0.0)),
+                ("Cobranza ejecutiva", amounts.get("Cobranza ejecutiva", 0.0)),
+                ("Proceso cerrado", amounts.get("Proceso cerrado", 0.0)),
+            ]
         )
         pie_status = (
             alt.Chart(status_df)
@@ -469,11 +477,12 @@ def render_debts_charts() -> None:
         st.altair_chart(pie_status, use_container_width=True)
     with c2:
         st.caption("Deudores con/sin servicios cortados")
-        st.caption(
-            "Monto total deuda: "
-            f"{format_amount(total_amount)} | "
-            f"Servicios cortados: {format_amount(amount_yes)} | "
-            f"Sin servicios cortados: {format_amount(amount_no)}"
+        amounts_summary_table(
+            [
+                ("Monto total deuda", total_amount),
+                ("Servicios cortados", amount_yes),
+                ("Sin servicios cortados", amount_no),
+            ]
         )
         pie_cut = (
             alt.Chart(cut_df)

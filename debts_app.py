@@ -144,6 +144,38 @@ def render_services_cut_pie(rows: list[dict]) -> None:
     st.altair_chart(pie, use_container_width=True)
 
 
+def render_debt_status_chart(rows: list[dict]) -> None:
+    counts = {status: 0 for status in DEBT_STATUS_OPTIONS}
+    for r in rows:
+        status = normalize_debt_status(r.get("status"))
+        counts[status] = counts.get(status, 0) + 1
+
+    status_df = pd.DataFrame(
+        [{"Estado": status, "Cantidad": counts.get(status, 0)} for status in DEBT_STATUS_OPTIONS]
+    )
+
+    st.subheader("Estado actual de las deudas")
+    bars = (
+        alt.Chart(status_df)
+        .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
+        .encode(
+            x=alt.X("Estado:N", sort=DEBT_STATUS_OPTIONS),
+            y=alt.Y("Cantidad:Q"),
+            color=alt.Color(
+                "Estado:N",
+                scale=alt.Scale(
+                    domain=DEBT_STATUS_OPTIONS,
+                    range=["#6b7280", "#2f83a3", "#d64545", "#2c9f7a"],
+                ),
+                legend=None,
+            ),
+            tooltip=["Estado", "Cantidad"],
+        )
+        .properties(height=280)
+    )
+    st.altair_chart(bars, use_container_width=True)
+
+
 def create_debt_form() -> None:
     st.markdown('<div class="section-box">', unsafe_allow_html=True)
     st.subheader("Registrar nueva deuda")
@@ -257,6 +289,7 @@ def main() -> None:
     st.subheader("Deudas registradas")
     if rows:
         st.dataframe(debts_table(rows), use_container_width=True, hide_index=True)
+        render_debt_status_chart(rows)
         render_services_cut_pie(rows)
     else:
         st.info("No hay deudas registradas.")

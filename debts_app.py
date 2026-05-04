@@ -157,6 +157,13 @@ def debts_table(rows: list[dict]) -> pd.DataFrame:
     )
 
 
+def amounts_summary_table(items: list[tuple[str, float]]) -> None:
+    df = pd.DataFrame(
+        [{"Concepto": label, "Monto": format_amount(amount)} for label, amount in items]
+    )
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+
 def render_services_cut_pie(rows: list[dict]) -> None:
     cut_yes = sum(1 for r in rows if bool(r.get("services_cut")))
     cut_no = sum(1 for r in rows if not bool(r.get("services_cut")))
@@ -181,11 +188,12 @@ def render_services_cut_pie(rows: list[dict]) -> None:
     )
 
     st.subheader("Deudores por estado de servicios")
-    st.caption(
-        "Monto total deuda: "
-        f"{format_amount(total_amount)} | "
-        f"Servicios cortados: {format_amount(amount_yes)} | "
-        f"Sin servicios cortados: {format_amount(amount_no)}"
+    amounts_summary_table(
+        [
+            ("Monto total deuda", total_amount),
+            ("Servicios cortados", amount_yes),
+            ("Sin servicios cortados", amount_no),
+        ]
     )
     pie = (
         alt.Chart(chart_df)
@@ -237,13 +245,14 @@ def render_debt_status_chart(rows: list[dict]) -> None:
     total_amount = sum(amounts.values())
 
     st.subheader("Estado actual de las deudas")
-    st.caption(
-        "Monto total deuda: "
-        f"{format_amount(total_amount)} | "
-        + " | ".join(
-            f"{status}: {format_amount(amounts.get(status, 0.0))}"
-            for status in DEBT_STATUS_OPTIONS
-        )
+    amounts_summary_table(
+        [
+            ("Monto total deuda", total_amount),
+            ("Sin accion", amounts.get("Sin accion", 0.0)),
+            ("Plan acordado", amounts.get("Plan acordado", 0.0)),
+            ("Cobranza ejecutiva", amounts.get("Cobranza ejecutiva", 0.0)),
+            ("Proceso cerrado", amounts.get("Proceso cerrado", 0.0)),
+        ]
     )
     pie = (
         alt.Chart(status_df)
@@ -403,21 +412,26 @@ def main() -> None:
     st.subheader("Deudas registradas")
     if rows:
         st.dataframe(debts_table(rows), use_container_width=True, hide_index=True)
-        chart_col_1, chart_col_2 = st.columns(2)
+        chart_col_1, chart_sep, chart_col_2 = st.columns([1, 0.03, 1])
         with chart_col_1:
             render_debt_status_chart(rows)
+        with chart_sep:
+            st.markdown(
+                """
+                <div style="height: 520px; border-left: 1px solid #c9c9c9; margin: 0 auto;"></div>
+                """,
+                unsafe_allow_html=True,
+            )
         with chart_col_2:
             render_services_cut_pie(rows)
     else:
         st.info("No hay deudas registradas.")
 
-    c1, c2, c3 = st.columns([1.0, 1.0, 0.55], vertical_alignment="top")
+    c1, c2 = st.columns([1.0, 1.0], vertical_alignment="top")
     with c1:
         create_debt_form()
     with c2:
         edit_debt_form(rows)
-    with c3:
-        st.caption("Panel de carga compactado para mejorar la vista general.")
 
 
 if __name__ == "__main__":

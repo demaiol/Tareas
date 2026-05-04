@@ -290,7 +290,7 @@ def main() -> None:
     render_metrics()
 
     st.markdown("### Reporte operativo")
-    filter_col, refresh_col = st.columns([2, 1])
+    filter_col, refresh_col = st.columns([2, 1], vertical_alignment="bottom")
 
     with filter_col:
         status_filter = st.selectbox(
@@ -299,7 +299,6 @@ def main() -> None:
         )
 
     with refresh_col:
-        st.write("")
         if st.button("Refrescar reporte", use_container_width=True):
             st.rerun()
 

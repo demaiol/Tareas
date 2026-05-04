@@ -8,20 +8,16 @@ import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 
-from req_manager.db import (
-    DEBT_STATUS_OPTIONS,
-    ROLE_ADMIN,
-    ROLE_REQUERIMIENTOS,
-    authenticate_user,
-    consume_app_session_token,
-    create_community_debt,
-    ensure_schema,
-    list_community_debts,
-    normalize_debt_status,
-    register_login_event,
-    update_community_debt,
-)
+from req_manager import db as db
 from req_manager.ui import apply_dashboard_css
+
+DEBT_STATUS_OPTIONS = getattr(
+    db,
+    "DEBT_STATUS_OPTIONS",
+    ["Sin accion", "Plan acordado", "Cobranza ejecutiva", "Proceso cerrado"],
+)
+ROLE_ADMIN = getattr(db, "ROLE_ADMIN", "Admin")
+ROLE_REQUERIMIENTOS = getattr(db, "ROLE_REQUERIMIENTOS", "Requeriemientos")
 
 TZ = ZoneInfo("America/Santiago")
 load_dotenv()
@@ -62,14 +58,19 @@ def apartment_sort_key(value: str | None) -> tuple[int, int | str]:
 def require_admin_login() -> bool:
     token = st.query_params.get("sso_token")
     if token and not st.session_state.get("debts_admin_authenticated", False):
-        sso_data = consume_app_session_token(str(token), target_module="debts")
+        consume_token = getattr(db, "consume_app_session_token", None)
+        sso_data = None
+        if callable(consume_token):
+            sso_data = consume_token(str(token), target_module="debts")
         if sso_data and sso_data.get("role") in {ROLE_ADMIN, ROLE_REQUERIMIENTOS}:
             username = str(sso_data.get("username") or "Admin")
-            register_login_event(
-                username=username,
-                ip_address=_detect_client_ip(),
-                module="Deudas",
-            )
+            register_login = getattr(db, "register_login_event", None)
+            if callable(register_login):
+                register_login(
+                    username=username,
+                    ip_address=_detect_client_ip(),
+                    module="Deudas",
+                )
             st.session_state["debts_admin_authenticated"] = True
             st.session_state["debts_actor"] = username
             st.query_params.clear()
@@ -87,16 +88,19 @@ def require_admin_login() -> bool:
         submitted = st.form_submit_button("Ingresar", use_container_width=True)
 
     if submitted:
-        if authenticate_user(
+        authenticate = getattr(db, "authenticate_user", None)
+        if callable(authenticate) and authenticate(
             username,
             password,
             role=[ROLE_REQUERIMIENTOS, ROLE_ADMIN],
         ):
-            register_login_event(
-                username=username,
-                ip_address=_detect_client_ip(),
-                module="Deudas",
-            )
+            register_login = getattr(db, "register_login_event", None)
+            if callable(register_login):
+                register_login(
+                    username=username,
+                    ip_address=_detect_client_ip(),
+                    module="Deudas",
+                )
             st.session_state["debts_admin_authenticated"] = True
             st.session_state["debts_actor"] = username.strip() or "Admin"
             st.success("Autenticación correcta.")
@@ -179,8 +183,12 @@ def render_services_cut_pie(rows: list[dict]) -> None:
 
 def render_debt_status_chart(rows: list[dict]) -> None:
     counts = {status: 0 for status in DEBT_STATUS_OPTIONS}
+    normalize_status = getattr(db, "normalize_debt_status", None)
     for r in rows:
-        status = normalize_debt_status(r.get("status"))
+        if callable(normalize_status):
+            status = normalize_status(r.get("status"))
+        else:
+            status = str(r.get("status") or DEBT_STATUS_OPTIONS[0])
         counts[status] = counts.get(status, 0) + 1
 
     status_df = pd.DataFrame(
@@ -222,7 +230,12 @@ def create_debt_form() -> None:
         )
         submitted = st.form_submit_button("Registrar deuda", use_container_width=True)
         if submitted:
-            debt_id = create_community_debt(
+            create_debt = getattr(db, "create_community_debt", None)
+            if not callable(create_debt):
+                st.error("No se pudo registrar la deuda: versión de base de datos desactualizada.")
+                st.markdown("</div>", unsafe_allow_html=True)
+                return
+            debt_id = create_debt(
                 apartment_number=apartment_number,
                 debt_amount=float(debt_amount),
                 status=status,
@@ -258,7 +271,11 @@ def edit_debt_form(rows: list[dict]) -> None:
         st.markdown("</div>", unsafe_allow_html=True)
         return
 
-    current_status = normalize_debt_status(selected_row.get("status"))
+    normalize_status = getattr(db, "normalize_debt_status", None)
+    if callable(normalize_status):
+        current_status = normalize_status(selected_row.get("status"))
+    else:
+        current_status = str(selected_row.get("status") or DEBT_STATUS_OPTIONS[0])
     status_index = (
         DEBT_STATUS_OPTIONS.index(current_status)
         if current_status in DEBT_STATUS_OPTIONS
@@ -288,7 +305,12 @@ def edit_debt_form(rows: list[dict]) -> None:
         )
         submitted = st.form_submit_button("Guardar cambios", use_container_width=True)
         if submitted:
-            updated = update_community_debt(
+            update_debt = getattr(db, "update_community_debt", None)
+            if not callable(update_debt):
+                st.error("No se pudo actualizar la deuda: versión de base de datos desactualizada.")
+                st.markdown("</div>", unsafe_allow_html=True)
+                return
+            updated = update_debt(
                 debt_id=selected_id,
                 apartment_number=apartment_number,
                 debt_amount=float(debt_amount),
@@ -307,7 +329,11 @@ def edit_debt_form(rows: list[dict]) -> None:
 
 
 def main() -> None:
-    ensure_schema()
+    ensure_schema_fn = getattr(db, "ensure_schema", None)
+    if not callable(ensure_schema_fn):
+        st.error("Módulo de deudas no disponible: falta `ensure_schema` en backend.")
+        return
+    ensure_schema_fn()
     if not require_admin_login():
         return
 
@@ -316,7 +342,11 @@ def main() -> None:
         f"Registro operativo de deuda por dpto | {datetime.now(TZ).strftime('%d-%m-%Y %H:%M')}"
     )
 
-    rows = list_community_debts()
+    list_debts = getattr(db, "list_community_debts", None)
+    if not callable(list_debts):
+        st.error("Módulo de deudas no disponible: falta `list_community_debts` en backend.")
+        return
+    rows = list_debts()
     st.subheader("Deudas registradas")
     if rows:
         st.dataframe(debts_table(rows), use_container_width=True, hide_index=True)

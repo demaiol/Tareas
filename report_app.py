@@ -8,20 +8,16 @@ import streamlit as st
 from dotenv import load_dotenv
 from zoneinfo import ZoneInfo
 
-from req_manager.db import (
-    DEBT_STATUS_OPTIONS,
-    authenticate_user,
-    ensure_schema,
-    get_metrics,
-    list_community_debts,
-    list_admin_logins,
-    list_requirements,
-    normalize_debt_status,
-    register_login_event,
-    ROLE_ADMIN,
-    ROLE_REPORTES,
-)
+from req_manager import db as db
 from req_manager.ui import apply_dashboard_css
+
+DEBT_STATUS_OPTIONS = getattr(
+    db,
+    "DEBT_STATUS_OPTIONS",
+    ["Sin accion", "Plan acordado", "Cobranza ejecutiva", "Proceso cerrado"],
+)
+ROLE_ADMIN = getattr(db, "ROLE_ADMIN", "Admin")
+ROLE_REPORTES = getattr(db, "ROLE_REPORTES", "Reportes")
 
 TZ = ZoneInfo("America/Santiago")
 load_dotenv()
@@ -47,12 +43,18 @@ def require_report_login() -> bool:
         submitted = st.form_submit_button("Ingresar", use_container_width=True)
 
     if submitted:
-        if authenticate_user(
+        if db.authenticate_user(
             username,
             password,
             role=[ROLE_REPORTES, ROLE_ADMIN],
         ):
-            register_login_event(username=username, ip_address=_detect_client_ip(), module="Reportes")
+            register_login = getattr(db, "register_login_event", None)
+            if callable(register_login):
+                register_login(
+                    username=username,
+                    ip_address=_detect_client_ip(),
+                    module="Reportes",
+                )
             st.session_state["report_authenticated"] = True
             st.success("Autenticación correcta.")
             st.rerun()
@@ -334,7 +336,7 @@ def _detect_client_ip() -> str:
 
 def render_admin_logins() -> None:
     st.subheader("Últimos logins en Administrador")
-    logs = list_admin_logins(limit=50)
+    logs = db.list_admin_logins(limit=50)
     if not logs:
         st.caption("No hay logins registrados todavía.")
         return
@@ -354,7 +356,14 @@ def render_admin_logins() -> None:
 
 
 def render_debts_charts() -> None:
-    rows = list_community_debts()
+    list_debts = getattr(db, "list_community_debts", None)
+    normalize_status = getattr(db, "normalize_debt_status", None)
+    if not callable(list_debts):
+        st.subheader("Estado de deudas")
+        st.caption("Módulo de deudas no disponible en esta versión desplegada.")
+        return
+
+    rows = list_debts()
     if not rows:
         st.subheader("Estado de deudas")
         st.caption("No hay deudas registradas.")
@@ -364,7 +373,10 @@ def render_debts_charts() -> None:
     cut_yes = 0
     cut_no = 0
     for r in rows:
-        status = normalize_debt_status(r.get("status"))
+        if callable(normalize_status):
+            status = normalize_status(r.get("status"))
+        else:
+            status = str(r.get("status") or DEBT_STATUS_OPTIONS[0])
         counts[status] = counts.get(status, 0) + 1
         if bool(r.get("services_cut")):
             cut_yes += 1
@@ -426,13 +438,13 @@ def render_debts_charts() -> None:
 
 
 def main() -> None:
-    ensure_schema()
+    db.ensure_schema()
 
     if not require_report_login():
         return
 
-    rows = list_requirements("Todos")
-    metrics = get_metrics()
+    rows = db.list_requirements("Todos")
+    metrics = db.get_metrics()
 
     st.title("Reporte Ejecutivo")
     st.caption(

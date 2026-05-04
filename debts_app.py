@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
@@ -48,6 +49,13 @@ def format_amount(value: float | int | str | None) -> str:
         return "$0"
 
 
+def apartment_sort_key(value: str | None) -> tuple[int, int | str]:
+    v = str(value or "").strip()
+    if v.isdigit():
+        return (0, int(v))
+    return (1, v.lower())
+
+
 def require_admin_login() -> bool:
     if st.session_state.get("debts_admin_authenticated", False):
         return True
@@ -73,6 +81,7 @@ def require_admin_login() -> bool:
 
 
 def debts_table(rows: list[dict]) -> pd.DataFrame:
+    sorted_rows = sorted(rows, key=lambda r: apartment_sort_key(r.get("apartment_number")))
     return pd.DataFrame(
         [
             {
@@ -84,9 +93,40 @@ def debts_table(rows: list[dict]) -> pd.DataFrame:
                 "Último contacto / intento": r.get("last_contact") or "-",
                 "Actualizado": format_dt(r.get("updated_at")),
             }
-            for r in rows
+            for r in sorted_rows
         ]
     )
+
+
+def render_services_cut_pie(rows: list[dict]) -> None:
+    cut_yes = sum(1 for r in rows if bool(r.get("services_cut")))
+    cut_no = sum(1 for r in rows if not bool(r.get("services_cut")))
+    chart_df = pd.DataFrame(
+        [
+            {"Grupo": "Servicios cortados", "Cantidad": cut_yes},
+            {"Grupo": "Sin servicios cortados", "Cantidad": cut_no},
+        ]
+    )
+
+    st.subheader("Deudores por estado de servicios")
+    pie = (
+        alt.Chart(chart_df)
+        .mark_arc(innerRadius=65)
+        .encode(
+            theta=alt.Theta(field="Cantidad", type="quantitative"),
+            color=alt.Color(
+                field="Grupo",
+                type="nominal",
+                scale=alt.Scale(
+                    domain=["Servicios cortados", "Sin servicios cortados"],
+                    range=["#d64545", "#2c9f7a"],
+                ),
+            ),
+            tooltip=["Grupo", "Cantidad"],
+        )
+        .properties(height=280)
+    )
+    st.altair_chart(pie, use_container_width=True)
 
 
 def create_debt_form() -> None:
@@ -100,7 +140,7 @@ def create_debt_form() -> None:
         last_contact = st.text_area(
             "Último contacto (o intento)",
             placeholder="Ej: 03-05-2026 llamado telefónico sin respuesta.",
-            height=100,
+            height=70,
         )
         submitted = st.form_submit_button("Registrar deuda", use_container_width=True)
         if submitted:
@@ -128,13 +168,14 @@ def edit_debt_form(rows: list[dict]) -> None:
         st.markdown("</div>", unsafe_allow_html=True)
         return
 
+    sorted_rows = sorted(rows, key=lambda r: apartment_sort_key(r.get("apartment_number")))
     options = [
         f"{r['id']} | Dpto {r['apartment_number']} | {format_amount(r['debt_amount'])} | {r['status']}"
-        for r in rows
+        for r in sorted_rows
     ]
     selected = st.selectbox("Seleccionar registro", options)
     selected_id = int(selected.split("|")[0].strip())
-    selected_row = next((r for r in rows if int(r["id"]) == selected_id), None)
+    selected_row = next((r for r in sorted_rows if int(r["id"]) == selected_id), None)
     if not selected_row:
         st.markdown("</div>", unsafe_allow_html=True)
         return
@@ -165,7 +206,7 @@ def edit_debt_form(rows: list[dict]) -> None:
         last_contact = st.text_area(
             "Último contacto (o intento)",
             value=str(selected_row.get("last_contact") or ""),
-            height=100,
+            height=70,
         )
         submitted = st.form_submit_button("Guardar cambios", use_container_width=True)
         if submitted:
@@ -201,14 +242,17 @@ def main() -> None:
     st.subheader("Deudas registradas")
     if rows:
         st.dataframe(debts_table(rows), use_container_width=True, hide_index=True)
+        render_services_cut_pie(rows)
     else:
         st.info("No hay deudas registradas.")
 
-    c1, c2 = st.columns(2)
+    c1, c2, c3 = st.columns([1.0, 1.0, 0.55], vertical_alignment="top")
     with c1:
         create_debt_form()
     with c2:
         edit_debt_form(rows)
+    with c3:
+        st.caption("Panel de carga compactado para mejorar la vista general.")
 
 
 if __name__ == "__main__":
